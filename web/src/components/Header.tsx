@@ -77,14 +77,14 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar, title = 'Da
                 </div>
                 <div className="py-1">
                   <button
-                    onClick={() => { setShowDropdown(false); navigate('/coming-soon/profile'); }}
+                    onClick={() => { setShowDropdown(false); navigate('/profile'); }}
                     className="w-full flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-50 text-left"
                   >
                     <User size={15} className="text-gray-400" />
                     <span>My Profile</span>
                   </button>
                   <button
-                    onClick={() => { setShowDropdown(false); navigate('/coming-soon/settings'); }}
+                    onClick={() => { setShowDropdown(false); navigate('/settings'); }}
                     className="w-full flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-50 text-left"
                   >
                     <Shield size={15} className="text-gray-400" />

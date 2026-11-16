@@ -44,19 +44,19 @@ export const Dashboard: React.FC = () => {
       title: 'Apply Leave',
       icon: CalendarPlus,
       color: '#0284C7',
-      action: () => navigate('/coming-soon/leaves')
+      action: () => navigate('/leaves')
     },
     {
       title: 'Check Attendance',
       icon: ClipboardCheck,
       color: '#059669',
-      action: () => navigate('/coming-soon/attendance')
+      action: () => navigate('/attendance')
     },
     {
       title: 'Generate Report',
       icon: FileSpreadsheet,
       color: '#D97706',
-      action: () => navigate('/coming-soon/reports')
+      action: () => navigate('/reports')
     }
   ];
 
@@ -185,7 +185,7 @@ export const Dashboard: React.FC = () => {
               <p className="text-xs text-gray-500">Recent applications</p>
             </div>
             <button
-              onClick={() => navigate('/coming-soon/leaves')}
+              onClick={() => navigate('/leaves')}
               className="text-xs font-semibold text-[#6338DF] hover:underline flex items-center gap-1"
             >
               <span>View All</span>
@@ -221,7 +221,7 @@ export const Dashboard: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate('/coming-soon/leaves')}
+              onClick={() => navigate('/leaves')}
               className="w-full"
             >
               Review Pending Leaves

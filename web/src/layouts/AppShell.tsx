@@ -14,12 +14,14 @@ export const AppShell: React.FC = () => {
     if (path.includes('/employees')) return 'Employee Management';
     if (path.includes('/attendance')) return 'GPS Attendance Dashboard';
     if (path.includes('/hybrid-approvals')) return 'Hybrid Work Approvals';
-    if (path.includes('/reports')) return 'Reports & Analytics';
+    if (path.includes('/leaves')) return 'Leave Management';
     if (path.includes('/shifts')) return 'Shift Management & Rostering';
-    if (path.includes('/settings')) return 'Settings & Security';
+    if (path.includes('/holiday-calendar')) return 'Company Holiday Calendar';
+    if (path.includes('/regularization')) return 'Attendance Regularization';
+    if (path.includes('/reports')) return 'Reports & Analytics';
+    if (path.includes('/settings')) return 'Settings & Roles';
     if (path.includes('/audit-logs')) return 'Security Audit Logs';
-    if (path.includes('/coming-soon/leaves')) return 'Leave Management';
-    if (path.includes('/coming-soon/holiday-calendar')) return 'Holiday Calendar';
+    if (path.includes('/profile')) return 'My Employee Profile';
     return 'PJN Tech HRMS';
   };
 
