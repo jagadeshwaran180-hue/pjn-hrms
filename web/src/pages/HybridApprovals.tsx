@@ -3,7 +3,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Calendar,
-  ShieldAlert
+  ShieldAlert,
+  Edit2,
+  RotateCcw
 } from 'lucide-react';
 import { Card, Badge, Button, Modal, Input } from '../components/ui';
 
@@ -79,9 +81,10 @@ const initialHybridRequests: HybridRequest[] = [
 export const HybridApprovals: React.FC = () => {
   const [requests, setRequests] = useState<HybridRequest[]>(initialHybridRequests);
   const [activeRequest, setActiveRequest] = useState<HybridRequest | null>(null);
-  const [modalMode, setModalMode] = useState<'review' | 'revoke' | null>(null);
+  const [modalMode, setModalMode] = useState<'review' | 'revoke' | 'edit' | null>(null);
   const [actionReason, setActionReason] = useState('');
   const [validUntilDate, setValidUntilDate] = useState('20 Nov 2026');
+  const [editStatus, setEditStatus] = useState<HybridRequest['status']>('Approved');
 
   const pendingCount = requests.filter((r) => r.status === 'Pending').length;
   const approvedCount = requests.filter((r) => r.status === 'Approved').length;
@@ -100,6 +103,14 @@ export const HybridApprovals: React.FC = () => {
     setModalMode('revoke');
   };
 
+  const handleOpenEdit = (req: HybridRequest) => {
+    setActiveRequest(req);
+    setEditStatus(req.status);
+    setValidUntilDate(req.validUntil || req.endDate);
+    setActionReason(req.rejectionReason || '');
+    setModalMode('edit');
+  };
+
   const handleApprove = () => {
     if (!activeRequest) return;
     setRequests(
@@ -109,7 +120,8 @@ export const HybridApprovals: React.FC = () => {
               ...r,
               status: 'Approved',
               approvedBy: 'Admin (HR)',
-              validUntil: validUntilDate
+              validUntil: validUntilDate,
+              rejectionReason: undefined
             }
           : r
       )
@@ -126,7 +138,8 @@ export const HybridApprovals: React.FC = () => {
               ...r,
               status: 'Rejected',
               approvedBy: 'Admin (HR)',
-              rejectionReason: actionReason || 'Does not meet policy criteria'
+              rejectionReason: actionReason || 'Does not meet policy criteria',
+              validUntil: undefined
             }
           : r
       )
@@ -143,6 +156,27 @@ export const HybridApprovals: React.FC = () => {
               ...r,
               status: 'Revoked',
               rejectionReason: actionReason || 'Revoked by HR administrator'
+            }
+          : r
+      )
+    );
+    setModalMode(null);
+  };
+
+  const handleSaveEdit = () => {
+    if (!activeRequest) return;
+    setRequests(
+      requests.map((r) =>
+        r.id === activeRequest.id
+          ? {
+              ...r,
+              status: editStatus,
+              approvedBy: editStatus === 'Approved' ? 'Admin (HR)' : r.approvedBy,
+              validUntil: editStatus === 'Approved' ? validUntilDate : undefined,
+              rejectionReason:
+                editStatus === 'Rejected' || editStatus === 'Revoked'
+                  ? actionReason || 'Updated by HR administrator'
+                  : undefined
             }
           : r
       )
@@ -208,7 +242,7 @@ export const HybridApprovals: React.FC = () => {
         <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between">
           <div>
             <h3 className="font-bold text-gray-900 text-sm sm:text-base">Hybrid Attendance Requests</h3>
-            <p className="text-xs text-gray-500">Review, authorize, set validity, or revoke remote attendance requests</p>
+            <p className="text-xs text-gray-500">Review, authorize, edit decisions, set validity, or revoke remote attendance</p>
           </div>
         </div>
 
@@ -270,24 +304,34 @@ export const HybridApprovals: React.FC = () => {
                   </td>
 
                   <td className="py-3.5 px-4 sm:px-6 text-right">
-                    {req.status === 'Pending' && (
-                      <Button size="sm" onClick={() => handleOpenReview(req)}>
-                        Review & Decide
-                      </Button>
-                    )}
-                    {req.status === 'Approved' && (
+                    <div className="flex items-center justify-end gap-1.5">
+                      {req.status === 'Pending' && (
+                        <Button size="sm" onClick={() => handleOpenReview(req)}>
+                          Review & Decide
+                        </Button>
+                      )}
+                      {req.status === 'Approved' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenRevoke(req)}
+                          className="text-red-600 border-red-200 hover:bg-red-50"
+                        >
+                          Revoke
+                        </Button>
+                      )}
+                      {/* Edit Button for correcting mistaken clicks or changing decisions */}
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleOpenRevoke(req)}
-                        className="text-red-600 border-red-200 hover:bg-red-50"
+                        icon={<Edit2 size={13} />}
+                        onClick={() => handleOpenEdit(req)}
+                        title="Edit or change decision"
+                        className="text-gray-700 hover:text-[#6338DF] hover:border-purple-200"
                       >
-                        Revoke Approval
+                        Edit
                       </Button>
-                    )}
-                    {(req.status === 'Rejected' || req.status === 'Revoked') && (
-                      <span className="text-xs text-gray-400 italic">Decision Logged</span>
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -397,6 +441,94 @@ export const HybridApprovals: React.FC = () => {
             required
           />
         </div>
+      </Modal>
+
+      {/* 6. Edit Decision Modal (For correcting accidental clicks or modifying status) */}
+      <Modal
+        isOpen={modalMode === 'edit'}
+        onClose={() => setModalMode(null)}
+        title={`Edit Decision: ${activeRequest?.id}`}
+        subtitle="Correct mistaken clicks or update decision status and validity"
+        badge="Decision Correction"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setModalMode(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleSaveEdit}>
+              Update Decision
+            </Button>
+          </>
+        }
+      >
+        {activeRequest && (
+          <div className="space-y-4 text-xs">
+            <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-100 flex items-center justify-between">
+              <div>
+                <p className="font-bold text-gray-900">{activeRequest.name} ({activeRequest.empId})</p>
+                <p className="text-gray-500 text-[11px]">{activeRequest.department} • Window: {activeRequest.startDate} - {activeRequest.endDate}</p>
+              </div>
+              <Badge variant={activeRequest.status === 'Approved' ? 'present' : activeRequest.status === 'Pending' ? 'pending' : 'absent'}>
+                Current: {activeRequest.status}
+              </Badge>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Change Status To *
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(['Pending', 'Approved', 'Rejected', 'Revoked'] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setEditStatus(s)}
+                    className={`py-2 px-2.5 rounded-lg text-xs font-semibold border transition-all text-center ${
+                      editStatus === s
+                        ? s === 'Approved'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : s === 'Pending'
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                          : s === 'Rejected'
+                          ? 'bg-red-600 text-white border-red-600 shadow-sm'
+                          : 'bg-gray-800 text-white border-gray-800 shadow-sm'
+                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {editStatus === 'Approved' && (
+              <Input
+                label="Authorization Validity Expiry Date *"
+                value={validUntilDate}
+                onChange={(e) => setValidUntilDate(e.target.value)}
+                placeholder="e.g. 20 Nov 2026"
+                required
+              />
+            )}
+
+            {(editStatus === 'Rejected' || editStatus === 'Revoked') && (
+              <Input
+                label="Reason / Audit Remarks *"
+                value={actionReason}
+                onChange={(e) => setActionReason(e.target.value)}
+                placeholder="Reason for rejection or revocation"
+                required
+              />
+            )}
+
+            {editStatus === 'Pending' && (
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 flex items-center gap-2">
+                <RotateCcw size={14} className="shrink-0" />
+                <span>Resetting to <strong>Pending</strong> will reopen this request for regular review.</span>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );
