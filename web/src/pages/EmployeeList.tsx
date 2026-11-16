@@ -7,31 +7,46 @@ import {
   Edit2,
   ChevronLeft,
   ChevronRight,
-  X,
-  AlertCircle
+  Building2,
+  Mail,
+  Calendar,
+  Briefcase
 } from 'lucide-react';
 import { mockEmployees } from '../data/mockData';
 import { Employee } from '../types';
+import { Card, Badge, Button, Input, Modal, EmptyState } from '../components/ui';
 
 export const EmployeeList: React.FC = () => {
+  const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
 
-  // Selected employee for mock modal
+  // Selected employee for modal
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add' | null>(null);
 
+  // Add/Edit Form State
+  const [formData, setFormData] = useState({
+    id: '',
+    name: '',
+    department: 'Engineering',
+    designation: '',
+    email: '',
+    status: 'Active' as Employee['status'],
+    joinDate: '16 Nov 2026'
+  });
+
   // Departments list
   const departments = useMemo(() => {
-    return ['All', ...Array.from(new Set(mockEmployees.map((e) => e.department)))];
-  }, []);
+    return ['All', ...Array.from(new Set(employees.map((e) => e.department)))];
+  }, [employees]);
 
   // Filtered list
   const filteredEmployees = useMemo(() => {
-    return mockEmployees.filter((emp) => {
+    return employees.filter((emp) => {
       const matchesSearch =
         emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         emp.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -43,7 +58,7 @@ export const EmployeeList: React.FC = () => {
 
       return matchesSearch && matchesDept && matchesStatus;
     });
-  }, [searchTerm, departmentFilter, statusFilter]);
+  }, [employees, searchTerm, departmentFilter, statusFilter]);
 
   // Paginated records
   const totalPages = Math.ceil(filteredEmployees.length / itemsPerPage) || 1;
@@ -54,12 +69,53 @@ export const EmployeeList: React.FC = () => {
 
   const handleOpenModal = (mode: 'view' | 'edit' | 'add', emp?: Employee) => {
     setModalMode(mode);
-    setSelectedEmployee(emp || null);
+    if (emp) {
+      setSelectedEmployee(emp);
+      setFormData({
+        id: emp.id,
+        name: emp.name,
+        department: emp.department,
+        designation: emp.designation,
+        email: emp.email,
+        status: emp.status,
+        joinDate: emp.joinDate || '16 Nov 2026'
+      });
+    } else {
+      setSelectedEmployee(null);
+      const nextId = `EMP-0${employees.length + 1}`.padStart(7, '0');
+      setFormData({
+        id: nextId,
+        name: '',
+        department: 'Engineering',
+        designation: '',
+        email: '',
+        status: 'Active',
+        joinDate: '16 Nov 2026'
+      });
+    }
   };
 
   const handleCloseModal = () => {
     setModalMode(null);
     setSelectedEmployee(null);
+  };
+
+  const handleSaveEmployee = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (modalMode === 'add') {
+      const newEmp: Employee = {
+        ...formData,
+        id: formData.id || `EMP-0${employees.length + 1}`
+      };
+      setEmployees([newEmp, ...employees]);
+    } else if (modalMode === 'edit' && selectedEmployee) {
+      setEmployees(
+        employees.map((emp) =>
+          emp.id === selectedEmployee.id ? { ...emp, ...formData } : emp
+        )
+      );
+    }
+    handleCloseModal();
   };
 
   return (
@@ -75,28 +131,23 @@ export const EmployeeList: React.FC = () => {
           </p>
         </div>
 
-        <button
+        <Button
           onClick={() => handleOpenModal('add')}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#6338DF] hover:bg-[#5229cb] text-white font-semibold text-sm shadow-sm transition-all focus:ring-2 focus:ring-[#6338DF] focus:ring-offset-2"
+          icon={<UserPlus size={16} />}
         >
-          <UserPlus size={16} />
-          <span>Add Employee</span>
-        </button>
+          Add Employee
+        </Button>
       </div>
 
       {/* 2. Search & Filters Bar */}
-      <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+      <Card padding="sm" className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
         {/* Search */}
-        <div className="relative flex-1">
-          <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
-            <Search size={16} />
-          </span>
-          <input
-            type="text"
+        <div className="flex-1">
+          <Input
+            icon={<Search size={16} />}
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             placeholder="Search by employee name, ID, designation, or email..."
-            className="w-full pl-9 pr-4 py-2 bg-gray-50/50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#6338DF] transition-all"
           />
         </div>
 
@@ -133,16 +184,16 @@ export const EmployeeList: React.FC = () => {
           {(searchTerm || departmentFilter !== 'All' || statusFilter !== 'All') && (
             <button
               onClick={() => { setSearchTerm(''); setDepartmentFilter('All'); setStatusFilter('All'); setCurrentPage(1); }}
-              className="text-xs text-[#6338DF] hover:underline px-2 py-1"
+              className="text-xs text-[#6338DF] hover:underline px-2 py-1 font-medium"
             >
               Reset
             </button>
           )}
         </div>
-      </div>
+      </Card>
 
       {/* 3. Table Container */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <Card padding="none" className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
@@ -160,12 +211,10 @@ export const EmployeeList: React.FC = () => {
               {paginatedEmployees.length > 0 ? (
                 paginatedEmployees.map((emp) => (
                   <tr key={emp.id} className="hover:bg-purple-50/20 transition-colors">
-                    {/* Employee ID */}
                     <td className="py-3.5 px-4 sm:px-6 font-mono text-xs font-semibold text-[#6338DF]">
                       {emp.id}
                     </td>
 
-                    {/* Name */}
                     <td className="py-3.5 px-4 sm:px-6">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-purple-100 text-[#6338DF] font-bold text-xs flex items-center justify-center shrink-0">
@@ -175,42 +224,37 @@ export const EmployeeList: React.FC = () => {
                       </div>
                     </td>
 
-                    {/* Department */}
                     <td className="py-3.5 px-4 sm:px-6 text-gray-600 font-medium">
                       {emp.department}
                     </td>
 
-                    {/* Designation */}
                     <td className="py-3.5 px-4 sm:px-6 text-gray-600">
                       {emp.designation}
                     </td>
 
-                    {/* Email */}
                     <td className="py-3.5 px-4 sm:px-6 text-gray-500 font-mono text-xs">
                       {emp.email}
                     </td>
 
-                    {/* Status badge */}
                     <td className="py-3.5 px-4 sm:px-6">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                      <Badge
+                        variant={
                           emp.status === 'Active'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            ? 'present'
                             : emp.status === 'On Leave'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-gray-100 text-gray-700 border border-gray-200'
-                        }`}
+                            ? 'pending'
+                            : 'neutral'
+                        }
                       >
                         {emp.status}
-                      </span>
+                      </Badge>
                     </td>
 
-                    {/* Actions */}
                     <td className="py-3.5 px-4 sm:px-6 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => handleOpenModal('view', emp)}
-                          title="View Details"
+                          title="View Profile Details"
                           className="p-1.5 rounded-lg text-gray-400 hover:text-[#6338DF] hover:bg-purple-50 transition-colors"
                         >
                           <Eye size={16} />
@@ -228,16 +272,20 @@ export const EmployeeList: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-gray-500">
-                    <div className="max-w-sm mx-auto flex flex-col items-center">
-                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-3">
-                        <AlertCircle size={24} />
-                      </div>
-                      <p className="font-semibold text-gray-800 text-sm">No employees found</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Try adjusting your search criteria or resetting filters.
-                      </p>
-                    </div>
+                  <td colSpan={7}>
+                    <EmptyState
+                      title="No employees found"
+                      description="Try adjusting your search criteria or resetting filters."
+                      action={
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => { setSearchTerm(''); setDepartmentFilter('All'); setStatusFilter('All'); }}
+                        >
+                          Clear Filters
+                        </Button>
+                      }
+                    />
                   </td>
                 </tr>
               )}
@@ -275,64 +323,163 @@ export const EmployeeList: React.FC = () => {
             </button>
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* 5. UI-Only Placeholder Modal (Per handoff requirement) */}
-      {modalMode && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-100">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">
-                  {modalMode === 'add' && 'Add New Employee'}
-                  {modalMode === 'edit' && `Edit Profile: ${selectedEmployee?.name}`}
-                  {modalMode === 'view' && `Profile Overview: ${selectedEmployee?.name}`}
-                </h3>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-purple-50 text-[#6338DF] border border-purple-100">
-                  UI Mock Modal • Day 1 Deliverable
-                </span>
+      {/* 5. Employee Modal (View / Edit / Add) */}
+      <Modal
+        isOpen={modalMode !== null}
+        onClose={handleCloseModal}
+        title={
+          modalMode === 'add'
+            ? 'Add New Employee'
+            : modalMode === 'edit'
+            ? `Edit Employee: ${selectedEmployee?.name}`
+            : `Employee Profile: ${selectedEmployee?.name}`
+        }
+        subtitle="Manage employee attributes and department assignment"
+        badge={modalMode === 'view' ? selectedEmployee?.id : 'Day 3 UI'}
+        footer={
+          modalMode === 'view' ? (
+            <Button variant="outline" size="sm" onClick={handleCloseModal}>
+              Close
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" size="sm" onClick={handleCloseModal}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleSaveEmployee}>
+                {modalMode === 'add' ? 'Create Employee' : 'Save Changes'}
+              </Button>
+            </>
+          )
+        }
+      >
+        {modalMode === 'view' && selectedEmployee ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-4 p-4 rounded-xl bg-purple-50/50 border border-purple-100">
+              <div className="w-14 h-14 rounded-2xl bg-[#6338DF] text-white flex items-center justify-center font-bold text-xl shadow-md">
+                {selectedEmployee.name.charAt(0)}
               </div>
-              <button onClick={handleCloseModal} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600">
-                <X size={18} />
-              </button>
+              <div>
+                <h4 className="font-bold text-base text-gray-900">{selectedEmployee.name}</h4>
+                <p className="text-xs text-gray-500">{selectedEmployee.designation}</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <Badge variant={selectedEmployee.status === 'Active' ? 'present' : 'pending'}>
+                    {selectedEmployee.status}
+                  </Badge>
+                  <span className="text-xs font-mono text-gray-400">ID: {selectedEmployee.id}</span>
+                </div>
+              </div>
             </div>
 
-            {selectedEmployee ? (
-              <div className="space-y-3 text-sm">
-                <div>
-                  <span className="text-xs font-medium text-gray-400">Employee ID</span>
-                  <p className="font-semibold text-gray-900">{selectedEmployee.id}</p>
-                </div>
-                <div>
-                  <span className="text-xs font-medium text-gray-400">Department & Designation</span>
-                  <p className="font-semibold text-gray-900">{selectedEmployee.department} — {selectedEmployee.designation}</p>
-                </div>
-                <div>
-                  <span className="text-xs font-medium text-gray-400">Work Email</span>
-                  <p className="font-mono text-xs text-gray-700">{selectedEmployee.email}</p>
-                </div>
-                <div>
-                  <span className="text-xs font-medium text-gray-400">Status</span>
-                  <p className="font-semibold text-gray-900">{selectedEmployee.status}</p>
-                </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <span className="text-gray-400 font-medium flex items-center gap-1.5 mb-1">
+                  <Building2 size={13} />
+                  Department
+                </span>
+                <p className="font-semibold text-gray-800">{selectedEmployee.department}</p>
               </div>
-            ) : (
-              <div className="text-xs text-gray-500 py-4">
-                <p>Full employee creation form will be integrated on <strong>Day 3 (18 Nov)</strong> with Spring Boot backend APIs.</p>
-              </div>
-            )}
 
-            <div className="mt-6 pt-3 border-t border-gray-100 flex justify-end">
-              <button
-                onClick={handleCloseModal}
-                className="px-4 py-2 bg-[#6338DF] hover:bg-[#5229cb] text-white text-xs font-semibold rounded-lg"
-              >
-                Close Preview
-              </button>
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <span className="text-gray-400 font-medium flex items-center gap-1.5 mb-1">
+                  <Mail size={13} />
+                  Work Email
+                </span>
+                <p className="font-semibold text-gray-800 truncate">{selectedEmployee.email}</p>
+              </div>
+
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <span className="text-gray-400 font-medium flex items-center gap-1.5 mb-1">
+                  <Calendar size={13} />
+                  Joined Date
+                </span>
+                <p className="font-semibold text-gray-800">{selectedEmployee.joinDate || '12 Jan 2023'}</p>
+              </div>
+
+              <div className="p-3 bg-gray-50 rounded-xl">
+                <span className="text-gray-400 font-medium flex items-center gap-1.5 mb-1">
+                  <Briefcase size={13} />
+                  Assigned Branch
+                </span>
+                <p className="font-semibold text-gray-800">PJN Tech HQ (Bangalore)</p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <form onSubmit={handleSaveEmployee} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Employee ID"
+                value={formData.id}
+                onChange={(e) => setFormData({ ...formData, id: e.target.value })}
+                required
+              />
+              <Input
+                label="Full Name"
+                placeholder="e.g. John Doe"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                  Department *
+                </label>
+                <select
+                  value={formData.department}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  className="w-full py-2.5 px-3 bg-gray-50/50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#6338DF]"
+                >
+                  <option value="Engineering">Engineering</option>
+                  <option value="Mobile Apps">Mobile Apps</option>
+                  <option value="Backend">Backend</option>
+                  <option value="Database">Database</option>
+                  <option value="Human Resources">Human Resources</option>
+                  <option value="Quality Assurance">Quality Assurance</option>
+                  <option value="DevOps & Cloud">DevOps & Cloud</option>
+                </select>
+              </div>
+
+              <Input
+                label="Designation"
+                placeholder="e.g. Frontend Engineer"
+                value={formData.designation}
+                onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                required
+              />
+            </div>
+
+            <Input
+              label="Work Email"
+              type="email"
+              placeholder="e.g. name@pjntech.com"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              required
+            />
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Employment Status
+              </label>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value as Employee['status'] })}
+                className="w-full py-2.5 px-3 bg-gray-50/50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#6338DF]"
+              >
+                <option value="Active">Active</option>
+                <option value="On Leave">On Leave</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 };

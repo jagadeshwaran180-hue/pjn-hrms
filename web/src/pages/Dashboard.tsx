@@ -13,11 +13,11 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { mockKpis, mockAttendanceTrend, mockLeaveRequests } from '../data/mockData';
+import { Card, Badge, Button } from '../components/ui';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
 
-  // Map icon component dynamically
   const renderKpiIcon = (name: string, color: string) => {
     switch (name) {
       case 'Users':
@@ -33,7 +33,6 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  // Quick Action Buttons
   const quickActions = [
     {
       title: 'Add Employee',
@@ -66,10 +65,7 @@ export const Dashboard: React.FC = () => {
       {/* 1. KPI Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {mockKpis.map((kpi) => (
-          <div
-            key={kpi.id}
-            className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:shadow transition-shadow flex items-center justify-between"
-          >
+          <Card key={kpi.id} hoverable className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 {kpi.title}
@@ -88,22 +84,20 @@ export const Dashboard: React.FC = () => {
             >
               {renderKpiIcon(kpi.iconName, kpi.accentColor)}
             </div>
-          </div>
+          </Card>
         ))}
       </div>
 
       {/* 2. Middle Row: Attendance Line Chart & Leave Requests */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Attendance Overview Chart (2 cols) */}
-        <div className="lg:col-span-2 bg-white rounded-xl p-5 sm:p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
+        <Card className="lg:col-span-2 flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-base font-bold text-gray-900">Attendance Overview</h2>
               <p className="text-xs text-gray-500">Weekly workforce attendance trends (Mon - Fri)</p>
             </div>
-            <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-purple-50 text-[#6338DF] border border-purple-100">
-              Avg. 93% Present
-            </span>
+            <Badge variant="purple">Avg. 93% Present</Badge>
           </div>
 
           {/* SVG Line Chart */}
@@ -181,10 +175,10 @@ export const Dashboard: React.FC = () => {
               ))}
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Leave Requests Box (1 col) */}
-        <div className="bg-white rounded-xl p-5 sm:p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
+        <Card className="flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-base font-bold text-gray-900">Leave Requests</h2>
@@ -215,33 +209,29 @@ export const Dashboard: React.FC = () => {
                 </div>
 
                 <div className="shrink-0">
-                  <span
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                      req.status === 'Approved'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-amber-50 text-amber-700 border border-amber-200'
-                    }`}
-                  >
+                  <Badge variant={req.status === 'Approved' ? 'present' : 'pending'}>
                     {req.status}
-                  </span>
+                  </Badge>
                 </div>
               </div>
             ))}
           </div>
 
           <div className="mt-4 pt-3 border-t border-gray-100 text-center">
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => navigate('/coming-soon/leaves')}
-              className="w-full py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 font-medium text-xs rounded-lg transition-colors"
+              className="w-full"
             >
               Review Pending Leaves
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* 3. Quick Actions Grid */}
-      <div className="bg-white rounded-xl p-5 sm:p-6 border border-gray-100 shadow-sm">
+      <Card>
         <h2 className="text-base font-bold text-gray-900 mb-4">Quick Actions</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {quickActions.map((action) => {
@@ -265,7 +255,7 @@ export const Dashboard: React.FC = () => {
             );
           })}
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

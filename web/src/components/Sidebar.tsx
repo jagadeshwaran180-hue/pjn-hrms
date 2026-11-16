@@ -1,19 +1,8 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  Users,
-  Clock,
-  CalendarCheck,
-  CalendarDays,
-  CalendarRange,
-  FileCheck2,
-  BarChart3,
-  Settings,
-  ShieldAlert,
-  LogOut,
-  X
-} from 'lucide-react';
+import { LogOut, X } from 'lucide-react';
+import { navigationConfig } from '../config/navigation';
+import { useAuth } from '../hooks/useAuth';
 
 interface SidebarProps {
   mobileOpen: boolean;
@@ -22,22 +11,10 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) => {
   const navigate = useNavigate();
-
-  const navItems = [
-    { name: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
-    { name: 'Employees', to: '/employees', icon: Users },
-    { name: 'Attendance', to: '/coming-soon/attendance', icon: Clock },
-    { name: 'Leaves', to: '/coming-soon/leaves', icon: CalendarCheck },
-    { name: 'Shifts', to: '/coming-soon/shifts', icon: CalendarDays },
-    { name: 'Holiday Calendar', to: '/coming-soon/holiday-calendar', icon: CalendarRange },
-    { name: 'Regularization', to: '/coming-soon/regularization', icon: FileCheck2 },
-    { name: 'Reports', to: '/coming-soon/reports', icon: BarChart3 },
-    { name: 'Settings', to: '/coming-soon/settings', icon: Settings },
-    { name: 'Audit Logs', to: '/coming-soon/audit-logs', icon: ShieldAlert },
-  ];
+  const { user, logout } = useAuth();
 
   const handleLogout = () => {
-    localStorage.removeItem('pjn_demo_auth');
+    logout();
     navigate('/login');
   };
 
@@ -79,7 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) =
 
         {/* Navigation list */}
         <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {navItems.map((item) => {
+          {navigationConfig.map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
@@ -106,11 +83,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) =
           <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-colors">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center text-sm font-semibold text-white shrink-0">
-                A
+                {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-white truncate">Admin</p>
-                <p className="text-[11px] text-gray-400 truncate">admin@pjntech.com</p>
+                <p className="text-xs font-semibold text-white truncate">
+                  {user?.name ? user.name.toUpperCase() : 'Admin'}
+                </p>
+                <p className="text-[11px] text-gray-400 truncate">
+                  {user?.email || 'admin@pjntech.com'}
+                </p>
               </div>
             </div>
             <button

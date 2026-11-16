@@ -10,16 +10,17 @@ export const AppShell: React.FC = () => {
   // Derive dynamic page title from route path
   const getPageTitle = (path: string) => {
     if (path.includes('/dashboard')) return 'Dashboard';
+    if (path.includes('/company')) return 'Company & Branch Management';
     if (path.includes('/employees')) return 'Employee Management';
-    if (path.includes('/coming-soon/attendance')) return 'Attendance Management';
+    if (path.includes('/attendance')) return 'GPS Attendance Dashboard';
+    if (path.includes('/hybrid-approvals')) return 'Hybrid Work Approvals';
+    if (path.includes('/reports')) return 'Reports & Analytics';
+    if (path.includes('/shifts')) return 'Shift Management & Rostering';
+    if (path.includes('/settings')) return 'Settings & Security';
+    if (path.includes('/audit-logs')) return 'Security Audit Logs';
     if (path.includes('/coming-soon/leaves')) return 'Leave Management';
-    if (path.includes('/coming-soon/shifts')) return 'Shift Management';
     if (path.includes('/coming-soon/holiday-calendar')) return 'Holiday Calendar';
-    if (path.includes('/coming-soon/regularization')) return 'Regularization';
-    if (path.includes('/coming-soon/reports')) return 'Reports & Analytics';
-    if (path.includes('/coming-soon/settings')) return 'Settings & Roles';
-    if (path.includes('/coming-soon/audit-logs')) return 'Audit Logs';
-    return 'HRMS';
+    return 'PJN Tech HRMS';
   };
 
   return (
