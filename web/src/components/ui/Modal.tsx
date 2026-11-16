@@ -9,7 +9,7 @@ interface ModalProps {
   badge?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
-  maxWidth?: 'sm' | 'md' | 'lg';
+  maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -41,16 +41,18 @@ export const Modal: React.FC<ModalProps> = ({
   const maxWidthStyles = {
     sm: 'max-w-sm',
     md: 'max-w-md',
-    lg: 'max-w-lg'
+    lg: 'max-w-lg',
+    xl: 'max-w-2xl',
+    '2xl': 'max-w-4xl'
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-150">
       <div
-        className={`bg-white rounded-2xl w-full ${maxWidthStyles[maxWidth]} shadow-2xl border border-gray-100 overflow-hidden animate-in zoom-in-95 duration-150`}
+        className={`bg-white rounded-2xl w-full ${maxWidthStyles[maxWidth]} max-h-[90vh] flex flex-col shadow-2xl border border-gray-100 overflow-hidden animate-in zoom-in-95 duration-150`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
           <div>
             <h3 className="text-lg font-bold text-gray-900">{title}</h3>
             {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
@@ -70,11 +72,11 @@ export const Modal: React.FC<ModalProps> = ({
         </div>
 
         {/* Body */}
-        <div className="p-5">{children}</div>
+        <div className="p-5 overflow-y-auto flex-1">{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="p-4 bg-gray-50/75 border-t border-gray-100 flex items-center justify-end gap-2">
+          <div className="p-4 bg-gray-50/75 border-t border-gray-100 flex items-center justify-end gap-2 shrink-0">
             {footer}
           </div>
         )}
