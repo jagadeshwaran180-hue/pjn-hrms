@@ -94,15 +94,15 @@
 ---
 
 ### 06  Implementation and handoff checklist
-- [ ] Create feature branch `feat/hrms-web-day1-jagadeesh`
-- [ ] Initialize Vite React + TypeScript, Tailwind, React Router
-- [ ] Build reusable app shell (Sidebar, Header, ContentLayout)
-- [ ] Implement Login UI with all mock states
-- [ ] Implement Dashboard UI with sample chart and requests
-- [ ] Implement Employee List UI with mock records
-- [ ] Check 1440 px desktop, 768 px tablet, 390 px phone
-- [ ] Verify navigation, no TypeScript errors and no browser console errors
-- [ ] Submit screenshots for each screen, a running demo and pull request
+- [x] Create feature branch `feat/hrms-web-day1-jagadeesh`
+- [x] Initialize Vite React + TypeScript, Tailwind, React Router
+- [x] Build reusable app shell (Sidebar, Header, ContentLayout)
+- [x] Implement Login UI with all mock states
+- [x] Implement Dashboard UI with sample chart and requests
+- [x] Implement Employee List UI with mock records
+- [x] Check 1440 px desktop, 768 px tablet, 390 px phone
+- [x] Verify navigation, no TypeScript errors and no browser console errors
+- [x] Submit screenshots for each screen, a running demo and pull request
 
 ---
 
