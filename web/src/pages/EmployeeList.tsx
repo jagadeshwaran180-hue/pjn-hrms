@@ -5,12 +5,10 @@ import {
   UserPlus,
   Eye,
   Edit2,
-  Trash2,
   ChevronLeft,
   ChevronRight,
   X,
-  AlertCircle,
-  CheckCircle2
+  AlertCircle
 } from 'lucide-react';
 import { mockEmployees } from '../data/mockData';
 import { Employee } from '../types';

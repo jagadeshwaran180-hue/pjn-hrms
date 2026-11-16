@@ -10,8 +10,7 @@ import {
   ClipboardCheck,
   FileSpreadsheet,
   ArrowUpRight,
-  TrendingUp,
-  MoreVertical
+  TrendingUp
 } from 'lucide-react';
 import { mockKpis, mockAttendanceTrend, mockLeaveRequests } from '../data/mockData';
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Construction, ArrowLeft, Calendar, ShieldCheck, Clock } from 'lucide-react';
+import { Construction, ArrowLeft, ShieldCheck, Clock } from 'lucide-react';
 
 export const ComingSoon: React.FC = () => {
   const location = useLocation();
