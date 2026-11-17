@@ -1,0 +1,5 @@
+target/
+backend/target/
+node_modules/
+web/node_modules/
+.env
