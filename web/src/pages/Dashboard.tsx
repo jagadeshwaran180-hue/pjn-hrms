@@ -21,6 +21,8 @@ import {
 import { mockKpis, mockAttendanceTrend, mockLeaveRequests, mockEmployees } from '../data/mockData';
 import { Card, Badge, Button, Modal } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
+import { useRefresh } from '../context/RefreshContext';
+import * as api from '../services/api';
 
 type KpiType = 'employees' | 'present' | 'on_leave' | 'late' | null;
 
@@ -73,36 +75,55 @@ const mockPresentList: PresentEmployeeRecord[] = [
   { id: 'EMP-019', name: 'Harish Rao', department: 'Engineering', branch: 'BLR-HQ', checkIn: '10:05 AM', mode: 'In-House', geofence: 'Within Geofence', distance: '38m', status: 'Late' },
 ];
 
-// Mock dataset for Employees On Leave Today
+// Mock dataset for Employees On Leave Today (BUG-005: only approved leave covering 17 Nov)
 const mockOnLeaveList: OnLeaveRecord[] = [
-  { id: 'EMP-005', name: 'Arun Kumar', department: 'Human Resources', leaveType: 'Annual Leave', duration: '16 Nov â€“ 18 Nov 2026', reason: 'Family wedding event in native town', approvedBy: 'Admin (HR)' },
-  { id: 'EMP-013', name: 'Suresh Raina', department: 'Engineering', leaveType: 'Casual Leave', duration: '16 Nov 2026 (1 Day)', reason: 'Personal family emergency', approvedBy: 'Jagadeesh K' },
-  { id: 'EMP-014', name: 'Divya Nair', department: 'Marketing', leaveType: 'Annual Leave', duration: '15 Nov â€“ 19 Nov 2026', reason: 'Annual travel leave', approvedBy: 'Admin (HR)' },
-  { id: 'EMP-015', name: 'Manoj Kumar', department: 'Operations', leaveType: 'Sick Leave', duration: '16 Nov 2026 (1 Day)', reason: 'Viral fever & doctor rest advisory', approvedBy: 'HR Executive' },
-  { id: 'EMP-016', name: 'Ananya Roy', department: 'Finance & Accounts', leaveType: 'Maternity Leave', duration: '01 Nov â€“ 31 Dec 2026', reason: 'Approved Maternity Leave Plan', approvedBy: 'Admin (HR)' },
-  { id: 'EMP-017', name: 'Rohit Sharma', department: 'Logistics', leaveType: 'Casual Leave', duration: '16 Nov â€“ 17 Nov 2026', reason: 'Relocation & personal errands', approvedBy: 'HR Executive' },
-  { id: 'EMP-018', name: 'Deepa M', department: 'Engineering', leaveType: 'Sick Leave', duration: '16 Nov 2026 (1 Day)', reason: 'Dental appointment & recovery', approvedBy: 'Jagadeesh K' },
-  { id: 'EMP-020', name: 'Kavita Menon', department: 'Customer Success', leaveType: 'Annual Leave', duration: '14 Nov â€“ 18 Nov 2026', reason: 'Pre-planned festival travel', approvedBy: 'Admin (HR)' },
+  { id: 'EMP-006', name: 'Priya S', department: 'Quality Assurance', leaveType: 'Sick Leave', duration: '16 Nov to 17 Nov 2026', reason: 'Viral fever, resting under prescription', approvedBy: 'Admin (HR)' },
 ];
 
 // Mock dataset for Today's Late Arrivals
 const mockLateArrivalsList: LateArrivalRecord[] = [
-  { id: 'EMP-004', name: 'Ayesha N', department: 'Backend', checkIn: '09:48 AM', delay: '+18 mins', shift: 'General Shift (09:00 AM â€“ 06:00 PM)', reason: 'Traffic congestion on Outer Ring Road Flyover', regularizationStatus: 'Pending Request' },
-  { id: 'EMP-007', name: 'Rahul M', department: 'DevOps & Cloud', checkIn: '09:55 AM', delay: '+25 mins', shift: 'General Shift (09:00 AM â€“ 06:00 PM)', reason: 'Emergency production database patch triage from home', regularizationStatus: 'Approved' },
-  { id: 'EMP-012', name: 'Vikram Singh', department: 'Sales & Growth', checkIn: '09:42 AM', delay: '+12 mins', shift: 'General Shift (09:00 AM â€“ 06:00 PM)', reason: 'Client teleconference over-run before office commute', regularizationStatus: 'Action Needed' },
-  { id: 'EMP-019', name: 'Harish Rao', department: 'Engineering', checkIn: '10:05 AM', delay: '+35 mins', shift: 'General Shift (09:00 AM â€“ 06:00 PM)', reason: 'Namma Metro Purple Line service interruption', regularizationStatus: 'Pending Request' },
+  { id: 'EMP-004', name: 'Ayesha N', department: 'Backend', checkIn: '09:48 AM', delay: '+18 mins', shift: 'General Shift (09:00 AM to 06:00 PM)', reason: 'Traffic congestion on Outer Ring Road Flyover', regularizationStatus: 'Pending Request' },
+  { id: 'EMP-007', name: 'Rahul M', department: 'DevOps & Cloud', checkIn: '09:55 AM', delay: '+25 mins', shift: 'General Shift (09:00 AM to 06:00 PM)', reason: 'Emergency production database patch triage from home', regularizationStatus: 'Approved' },
+  { id: 'EMP-012', name: 'Vikram Singh', department: 'Sales & Growth', checkIn: '09:42 AM', delay: '+12 mins', shift: 'General Shift (09:00 AM to 06:00 PM)', reason: 'Client teleconference over-run before office commute', regularizationStatus: 'Action Needed' },
+  { id: 'EMP-019', name: 'Harish Rao', department: 'Engineering', checkIn: '10:05 AM', delay: '+35 mins', shift: 'General Shift (09:00 AM to 06:00 PM)', reason: 'Namma Metro Purple Line service interruption', regularizationStatus: 'Pending Request' },
 ];
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { registerRefreshHandler } = useRefresh();
 
   const [activeKpi, setActiveKpi] = useState<KpiType>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [liveLeaves, setLiveLeaves] = useState<any[]>([]);
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
 
   const isEmployee = user?.role === 'EMPLOYEE';
   const isManager = user?.role === 'MANAGER';
   const isAdminOrHr = user?.role === 'ADMIN' || user?.role === 'HR';
+
+  const loadDashboardData = React.useCallback(async () => {
+    try {
+      const [leavesData, statsData] = await Promise.all([
+        api.getLeaves().catch(() => []),
+        api.getDashboardStats().catch(() => null),
+      ]);
+      setLiveLeaves(leavesData);
+      setDashboardStats(statsData);
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  React.useEffect(() => {
+    return registerRefreshHandler(async () => {
+      await loadDashboardData();
+    });
+  }, [registerRefreshHandler, loadDashboardData]);
 
   // Check if current user has punched in
   const currentUserPresent = useMemo(() => {
@@ -120,7 +141,7 @@ export const Dashboard: React.FC = () => {
   }, [user]);
 
   // Team-scoped records for Manager
-  const teamMemberIds = user?.managedTeam || [];
+  const teamMemberIds = useMemo(() => user?.managedTeam || [], [user?.managedTeam]);
 
   const teamPresentList = useMemo(() => {
     if (!isManager) return [];
@@ -144,8 +165,8 @@ export const Dashboard: React.FC = () => {
         {
           id: 'my_attendance',
           title: 'My Today Punch',
-          value: currentUserPresent.checkIn,
-          subtitle: `${currentUserPresent.status} â€¢ ${currentUserPresent.mode}`,
+          value: dashboardStats?.myPunch || currentUserPresent.checkIn,
+          subtitle: `${currentUserPresent.status} • ${currentUserPresent.mode}`,
           icon: Clock,
           accentColor: '#10B981',
           bgColor: '#ECFDF5'
@@ -156,13 +177,13 @@ export const Dashboard: React.FC = () => {
           value: '14 Days',
           subtitle: 'Annual quota remaining',
           icon: CalendarPlus,
-          accentColor: '#6338DF',
+          accentColor: '#6534E8',
           bgColor: '#F5F3FF'
         },
         {
           id: 'my_regularization',
           title: 'My Regularizations',
-          value: '1 Pending',
+          value: dashboardStats?.pendingLeaves !== undefined ? `${dashboardStats.pendingLeaves} Pending` : '1 Pending',
           subtitle: 'Missed check-out punch',
           icon: FileCheck2,
           accentColor: '#F59E0B',
@@ -172,7 +193,7 @@ export const Dashboard: React.FC = () => {
           id: 'my_shift',
           title: 'Assigned Shift',
           value: 'General Shift',
-          subtitle: '09:00 AM â€“ 06:00 PM',
+          subtitle: '09:00 AM to 06:00 PM',
           icon: Users,
           accentColor: '#3B82F6',
           bgColor: '#EFF6FF'
@@ -185,7 +206,7 @@ export const Dashboard: React.FC = () => {
         {
           id: 'team_size',
           title: 'Assigned Team',
-          value: `${teamMemberIds.length} Staff`,
+          value: `${dashboardStats?.totalHeadcount ?? teamMemberIds.length} Staff`,
           subtitle: 'Direct reports assigned',
           icon: Users,
           accentColor: '#3B82F6',
@@ -194,7 +215,7 @@ export const Dashboard: React.FC = () => {
         {
           id: 'present',
           title: 'Team Present',
-          value: `${teamPresentList.length} Present`,
+          value: `${dashboardStats?.presentCount ?? teamPresentList.length} Present`,
           subtitle: 'Checked in today',
           icon: UserCheck,
           accentColor: '#10B981',
@@ -203,7 +224,7 @@ export const Dashboard: React.FC = () => {
         {
           id: 'on_leave',
           title: 'Team On Leave',
-          value: `${teamOnLeaveList.length} On Leave`,
+          value: `${dashboardStats?.onLeaveCount ?? teamOnLeaveList.length} On Leave`,
           subtitle: 'Active leaves today',
           icon: UserX,
           accentColor: '#F59E0B',
@@ -212,7 +233,7 @@ export const Dashboard: React.FC = () => {
         {
           id: 'late',
           title: 'Team Late Arrivals',
-          value: `${teamLateList.length} Late`,
+          value: `${dashboardStats?.lateCount ?? teamLateList.length} Late`,
           subtitle: 'Post cutoff today',
           icon: Clock,
           accentColor: '#EF4444',
@@ -222,11 +243,21 @@ export const Dashboard: React.FC = () => {
     }
 
     // Default: Admin / HR org-wide KPIs
-    return mockKpis.map((k) => ({
-      ...k,
-      icon: k.iconName === 'Users' ? Users : k.iconName === 'UserCheck' ? UserCheck : k.iconName === 'UserX' ? UserX : Clock
-    }));
-  }, [isEmployee, isManager, currentUserPresent, teamMemberIds, teamPresentList, teamOnLeaveList, teamLateList]);
+    return mockKpis.map((k) => {
+      let val = k.value;
+      if (dashboardStats) {
+        if (k.id === 'employees' && dashboardStats.totalHeadcount !== undefined) val = dashboardStats.totalHeadcount;
+        if (k.id === 'present' && dashboardStats.presentCount !== undefined) val = dashboardStats.presentCount;
+        if (k.id === 'on_leave' && dashboardStats.onLeaveCount !== undefined) val = dashboardStats.onLeaveCount;
+        if (k.id === 'late' && dashboardStats.lateCount !== undefined) val = dashboardStats.lateCount;
+      }
+      return {
+        ...k,
+        value: val,
+        icon: k.iconName === 'Users' ? Users : k.iconName === 'UserCheck' ? UserCheck : k.iconName === 'UserX' ? UserX : Clock
+      };
+    });
+  }, [isEmployee, isManager, currentUserPresent, teamMemberIds, teamPresentList, teamOnLeaveList, teamLateList, dashboardStats]);
 
   // Role-customized Quick Actions
   const quickActions = useMemo(() => {
@@ -253,7 +284,7 @@ export const Dashboard: React.FC = () => {
         {
           title: 'My Profile',
           icon: User,
-          color: '#6338DF',
+          color: '#6534E8',
           action: () => navigate('/profile')
         }
       ];
@@ -264,7 +295,7 @@ export const Dashboard: React.FC = () => {
         {
           title: 'Review Hybrid',
           icon: Laptop,
-          color: '#6338DF',
+          color: '#6534E8',
           action: () => navigate('/hybrid-approvals')
         },
         {
@@ -293,7 +324,7 @@ export const Dashboard: React.FC = () => {
       {
         title: 'Add Employee',
         icon: UserPlus,
-        color: '#6338DF',
+        color: '#6534E8',
         action: () => navigate('/employees?action=add')
       },
       {
@@ -317,8 +348,28 @@ export const Dashboard: React.FC = () => {
     ];
   }, [isEmployee, isManager, navigate]);
 
-  // Leave Requests scoped by role
+  // Leave Requests scoped by role, backed by real database
   const visibleLeaveRequests = useMemo(() => {
+    if (liveLeaves.length > 0) {
+      let list = liveLeaves;
+      if (isEmployee) {
+        list = list.filter((l) => l.empId === user?.id);
+      } else if (isManager) {
+        list = list.filter((l) => l.status === 'Pending' && (teamMemberIds.includes(l.empId) || l.empId === user?.id));
+      } else {
+        // BUG-003: Strictly show pending approvals for Admin/HR
+        list = list.filter((l) => l.status === 'Pending');
+      }
+      return list.slice(0, 5).map((l) => ({
+        id: l.id,
+        employeeName: l.name || l.employeeName || 'Staff',
+        leaveType: l.leaveType,
+        status: l.status,
+        startDate: l.startDate,
+        endDate: l.endDate,
+      }));
+    }
+
     if (isEmployee) {
       // Employee sees only their own requests
       return [
@@ -334,16 +385,16 @@ export const Dashboard: React.FC = () => {
     }
 
     if (isManager) {
-      // Manager sees team requests
+      // Manager sees pending team requests
       return mockLeaveRequests.filter((req) => {
         const emp = mockEmployees.find((e) => e.name === req.employeeName);
-        return emp && (teamMemberIds.includes(emp.id) || emp.id === user?.id);
+        return req.status === 'Pending' && emp && (teamMemberIds.includes(emp.id) || emp.id === user?.id);
       });
     }
 
-    // Admin/HR sees all
-    return mockLeaveRequests;
-  }, [isEmployee, isManager, user, teamMemberIds]);
+    // BUG-003: Admin/HR sees strictly pending requests
+    return mockLeaveRequests.filter((req) => req.status === 'Pending');
+  }, [liveLeaves, isEmployee, isManager, user, teamMemberIds]);
 
   // Filtered queries inside modals (restricted to authorized records)
   const filteredEmployees = useMemo(() => {
@@ -425,7 +476,7 @@ export const Dashboard: React.FC = () => {
               Welcome back, {user?.name || 'Employee'}
             </h2>
             <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-              user?.role === 'ADMIN' ? 'bg-purple-100 text-[#6338DF]' :
+              user?.role === 'ADMIN' ? 'bg-purple-100 text-[#6534E8]' :
               user?.role === 'HR' ? 'bg-blue-100 text-blue-700' :
               user?.role === 'MANAGER' ? 'bg-amber-100 text-amber-700' :
               'bg-emerald-100 text-emerald-700'
@@ -434,9 +485,9 @@ export const Dashboard: React.FC = () => {
             </span>
           </div>
           <p className="text-xs text-gray-500 mt-1">
-            {isEmployee && 'Self-service dashboard â€¢ Viewing your attendance, leave balances, and punch logs only.'}
-            {isManager && `Engineering Team Lead â€¢ Managing ${teamMemberIds.length} assigned team members.`}
-            {isAdminOrHr && 'Enterprise Administration â€¢ Real-time workforce management & attendance compliance.'}
+            {isEmployee && 'Self-service dashboard • Viewing your attendance, leave balances, and punch logs only.'}
+            {isManager && `Engineering Team Lead • Managing ${teamMemberIds.length} assigned team members.`}
+            {isAdminOrHr && 'Enterprise Administration • Real-time workforce management & attendance compliance.'}
           </p>
         </div>
 
@@ -464,7 +515,7 @@ export const Dashboard: React.FC = () => {
               type="button"
               disabled={!isClickable}
               onClick={() => handleOpenKpiModal(kpi.id)}
-              className={`group block w-full text-left focus:outline-none focus:ring-2 focus:ring-[#6338DF] rounded-xl transition-all ${
+              className={`group block w-full text-left focus:outline-none focus:ring-2 focus:ring-[#6534E8] rounded-xl transition-all ${
                 !isClickable ? 'cursor-default' : 'hover:scale-[1.01]'
               }`}
             >
@@ -475,16 +526,16 @@ export const Dashboard: React.FC = () => {
               >
                 <div className="min-w-0 flex-1 pr-2">
                   <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider group-hover:text-[#6338DF] transition-colors">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider group-hover:text-[#6534E8] transition-colors">
                       {kpi.title}
                     </p>
                     {isClickable && (
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold text-[#6338DF] bg-purple-50 px-1.5 py-0.5 rounded">
+                      <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] font-bold text-[#6534E8] bg-purple-50 px-1.5 py-0.5 rounded">
                         View &rarr;
                       </span>
                     )}
                   </div>
-                  <h3 className="text-2xl sm:text-3xl font-extrabold text-[#161A3D] mt-1 group-hover:scale-105 origin-left transition-transform">
+                  <h3 className="text-2xl sm:text-3xl font-extrabold text-[#151936] mt-1 group-hover:scale-105 origin-left transition-transform">
                     {kpi.value}
                   </h3>
                   <p className="text-[11px] text-gray-400 mt-1 flex items-center gap-1 font-medium">
@@ -520,9 +571,9 @@ export const Dashboard: React.FC = () => {
             {!isEmployee && (
               <button
                 onClick={() => handleOpenKpiModal('present')}
-                className="text-xs font-semibold text-[#6338DF] hover:underline flex items-center gap-1 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100"
+                className="text-xs font-semibold text-[#6534E8] hover:underline flex items-center gap-1 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100"
               >
-                <span>Avg. 93% Present</span>
+                <span>Avg. {((mockAttendanceTrend.reduce((s, d) => s + (d.presentCount / d.totalCount), 0) / mockAttendanceTrend.length) * 100).toFixed(1)}% Present</span>
                 <ArrowUpRight size={13} />
               </button>
             )}
@@ -533,8 +584,8 @@ export const Dashboard: React.FC = () => {
             <svg className="w-full h-full overflow-visible" viewBox="0 0 500 200" preserveAspectRatio="none">
               <defs>
                 <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#6338DF" stopOpacity="0.25" />
-                  <stop offset="100%" stopColor="#6338DF" stopOpacity="0.0" />
+                  <stop offset="0%" stopColor="#6534E8" stopOpacity="0.25" />
+                  <stop offset="100%" stopColor="#6534E8" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
 
@@ -550,7 +601,7 @@ export const Dashboard: React.FC = () => {
 
               <polyline
                 fill="none"
-                stroke="#6338DF"
+                stroke="#6534E8"
                 strokeWidth="3.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -565,7 +616,7 @@ export const Dashboard: React.FC = () => {
                 { x: 470, y: 70, label: isEmployee ? '9h 09m' : '142' }
               ].map((pt, idx) => (
                 <g key={idx}>
-                  <circle cx={pt.x} cy={pt.y} r="6" fill="#FFFFFF" stroke="#6338DF" strokeWidth="3" />
+                  <circle cx={pt.x} cy={pt.y} r="6" fill="#FFFFFF" stroke="#6534E8" strokeWidth="3" />
                   <text
                     x={pt.x}
                     y={pt.y - 12}
@@ -600,7 +651,7 @@ export const Dashboard: React.FC = () => {
             {!isEmployee && (
               <button
                 onClick={() => handleOpenKpiModal('on_leave')}
-                className="text-xs font-semibold text-[#6338DF] hover:underline flex items-center gap-1"
+                className="text-xs font-semibold text-[#6534E8] hover:underline flex items-center gap-1"
               >
                 <span>View All</span>
                 <ArrowUpRight size={13} />
@@ -617,7 +668,7 @@ export const Dashboard: React.FC = () => {
               visibleLeaveRequests.map((req) => (
                 <div key={req.id} className="py-3.5 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-full bg-purple-100 text-[#6338DF] font-bold text-xs flex items-center justify-center shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-purple-100 text-[#6534E8] font-bold text-xs flex items-center justify-center shrink-0">
                       {req.employeeName.charAt(0)}
                     </div>
                     <div className="min-w-0">
@@ -672,7 +723,7 @@ export const Dashboard: React.FC = () => {
                 >
                   <Icon size={22} />
                 </div>
-                <span className="text-xs sm:text-sm font-semibold text-gray-800 group-hover:text-[#6338DF]">
+                <span className="text-xs sm:text-sm font-semibold text-gray-800 group-hover:text-[#6534E8]">
                   {action.title}
                 </span>
               </button>
@@ -722,7 +773,7 @@ export const Dashboard: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-100">
                 <p className="text-[11px] text-blue-600 font-semibold uppercase">Total Workforce</p>
-                <p className="text-xl font-extrabold text-[#161A3D]">154</p>
+                <p className="text-xl font-extrabold text-[#151936]">154</p>
               </div>
               <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-100">
                 <p className="text-[11px] text-emerald-600 font-semibold uppercase">Active Status</p>
@@ -733,8 +784,8 @@ export const Dashboard: React.FC = () => {
                 <p className="text-xl font-extrabold text-amber-700">8</p>
               </div>
               <div className="p-3 bg-purple-50/60 rounded-xl border border-purple-100">
-                <p className="text-[11px] text-[#6338DF] font-semibold uppercase">Branches</p>
-                <p className="text-xl font-extrabold text-[#6338DF]">3 Offices</p>
+                <p className="text-[11px] text-[#6534E8] font-semibold uppercase">Branches</p>
+                <p className="text-xl font-extrabold text-[#6534E8]">3 Offices</p>
               </div>
             </div>
 
@@ -747,7 +798,7 @@ export const Dashboard: React.FC = () => {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Filter employees by name, ID, department..."
-                className="w-full pl-9 pr-3.5 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#6338DF]"
+                className="w-full pl-9 pr-3.5 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#6534E8]"
               />
             </div>
 
@@ -822,7 +873,7 @@ export const Dashboard: React.FC = () => {
                     <td className="px-3.5 py-2.5 font-medium text-gray-900 whitespace-nowrap">
                       <div>
                         <p className="font-semibold">{p.name}</p>
-                        <span className="font-mono text-[10px] text-gray-500">{p.id} â€¢ {p.department}</span>
+                        <span className="font-mono text-[10px] text-gray-500">{p.id} • {p.department}</span>
                       </div>
                     </td>
                     <td className="px-3.5 py-2.5 font-mono font-bold text-emerald-700 whitespace-nowrap">

@@ -1,14 +1,18 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   CheckCircle2,
   AlertCircle,
   Calendar,
   ShieldAlert,
   Edit2,
-  Lock
+  Lock,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { Card, Badge, Button, Modal, Input } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
+import { useRefresh } from '../context/RefreshContext';
+import * as api from '../services/api';
 
 interface HybridRequest {
   id: string;
@@ -21,102 +25,59 @@ interface HybridRequest {
   status: 'Pending' | 'Approved' | 'Rejected' | 'Revoked';
   appliedOn: string;
   approvedBy?: string;
+  processedBy?: string;
+  processedAt?: string;
   validUntil?: string;
   rejectionReason?: string;
+  version: number;
 }
-
-const initialHybridRequests: HybridRequest[] = [
-  {
-    id: 'HYB-201',
-    empId: 'EMP-003',
-    name: 'Karthick R',
-    department: 'Mobile Apps',
-    startDate: '18 Nov 2026',
-    endDate: '20 Nov 2026',
-    reason: 'Client device testing from home lab setup',
-    status: 'Pending',
-    appliedOn: '16 Nov 2026'
-  },
-  {
-    id: 'HYB-202',
-    empId: 'EMP-004',
-    name: 'Ayesha N',
-    department: 'Backend',
-    startDate: '17 Nov 2026',
-    endDate: '17 Nov 2026',
-    reason: 'Sprint planning and offsite network maintenance',
-    status: 'Approved',
-    appliedOn: '15 Nov 2026',
-    approvedBy: 'Admin (HR)',
-    validUntil: '17 Nov 2026'
-  },
-  {
-    id: 'HYB-203',
-    empId: 'EMP-006',
-    name: 'Priya S',
-    department: 'Quality Assurance',
-    startDate: '16 Nov 2026',
-    endDate: '19 Nov 2026',
-    reason: 'Personal recovery post-illness (doctor certified)',
-    status: 'Approved',
-    appliedOn: '14 Nov 2026',
-    approvedBy: 'Admin (HR)',
-    validUntil: '19 Nov 2026'
-  },
-  {
-    id: 'HYB-204',
-    empId: 'EMP-007',
-    name: 'Rahul M',
-    department: 'DevOps & Cloud',
-    startDate: '10 Nov 2026',
-    endDate: '12 Nov 2026',
-    reason: 'Datacenter migration overnight shift recovery',
-    status: 'Revoked',
-    appliedOn: '08 Nov 2026',
-    approvedBy: 'Admin (HR)',
-    validUntil: '12 Nov 2026',
-    rejectionReason: 'Revoked due to emergency on-site hardware upgrade'
-  },
-  {
-    id: 'HYB-205',
-    empId: 'EMP-002',
-    name: 'Imran M',
-    department: 'Engineering',
-    startDate: '25 Nov 2026',
-    endDate: '26 Nov 2026',
-    reason: 'Architecture review remote focus sprint',
-    status: 'Pending',
-    appliedOn: '16 Nov 2026'
-  }
-];
 
 export const HybridApprovals: React.FC = () => {
   const { user, canApprove } = useAuth();
-  const [requests, setRequests] = useState<HybridRequest[]>(initialHybridRequests);
+  const { registerRefreshHandler } = useRefresh();
+
+  const [requests, setRequests] = useState<HybridRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const [activeRequest, setActiveRequest] = useState<HybridRequest | null>(null);
   const [modalMode, setModalMode] = useState<'review' | 'revoke' | 'edit' | null>(null);
   const [actionReason, setActionReason] = useState('');
   const [validUntilDate, setValidUntilDate] = useState('20 Nov 2026');
   const [editStatus, setEditStatus] = useState<HybridRequest['status']>('Approved');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const isManager = user?.role === 'MANAGER';
 
-  // Filter requests strictly based on role
-  const authorizedRequests = useMemo(() => {
-    return requests.filter((req) => {
-      // 1. Manager: their own requests + requests of their assigned team members
-      if (isManager) {
-        return req.empId === user?.id || (user?.managedTeam && user.managedTeam.includes(req.empId));
-      }
-      // 2. Admin & HR: all requests
-      return true;
-    });
-  }, [requests, isManager, user]);
+  // Fetch hybrid requests from persistent backend
+  const loadRequests = useCallback(async () => {
+    try {
+      setFetchError(null);
+      const data = await api.getHybridRequests();
+      setRequests(data);
+    } catch (err: any) {
+      console.error('Failed to load hybrid requests:', err);
+      setFetchError(err.message || 'Unable to load hybrid requests.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const pendingCount = authorizedRequests.filter((r) => r.status === 'Pending').length;
-  const approvedCount = authorizedRequests.filter((r) => r.status === 'Approved').length;
-  const revokedCount = authorizedRequests.filter((r) => r.status === 'Revoked').length;
+  useEffect(() => {
+    loadRequests();
+  }, [loadRequests]);
+
+  // Hook into global RefreshContext
+  useEffect(() => {
+    return registerRefreshHandler(async () => {
+      await loadRequests();
+    });
+  }, [registerRefreshHandler, loadRequests]);
+
+  const pendingCount = requests.filter((r) => r.status === 'Pending').length;
+  const approvedCount = requests.filter((r) => r.status === 'Approved').length;
+  const revokedCount = requests.filter((r) => r.status === 'Revoked').length;
 
   const handleOpenReview = (req: HybridRequest) => {
     setActionError(null);
@@ -154,77 +115,107 @@ export const HybridApprovals: React.FC = () => {
     setModalMode('edit');
   };
 
-  const handleApprove = () => {
-    if (!activeRequest) return;
-    setRequests(
-      requests.map((r) =>
-        r.id === activeRequest.id
-          ? {
-              ...r,
-              status: 'Approved',
-              approvedBy: `${user?.name} (${user?.role})`,
-              validUntil: validUntilDate,
-              rejectionReason: undefined
-            }
-          : r
-      )
-    );
-    setModalMode(null);
+  const handleApprove = async () => {
+    if (!activeRequest || isProcessing) return;
+    setIsProcessing(true);
+    setActionError(null);
+
+    try {
+      const updated = await api.decideHybridRequest(activeRequest.id, 'approve', {
+        validUntil: validUntilDate,
+        reason: actionReason,
+        expectedVersion: activeRequest.version,
+      });
+
+      setRequests((prev) => prev.map((r) => (r.id === activeRequest.id ? { ...r, ...updated, status: 'Approved' } : r)));
+      setModalMode(null);
+    } catch (err: any) {
+      console.error('Approve hybrid error:', err);
+      setActionError(err.message || 'Approval decision could not be saved. Please retry.');
+      if (err.latest) {
+        setRequests((prev) => prev.map((r) => (r.id === activeRequest.id ? { ...r, ...err.latest } : r)));
+        setModalMode(null);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleReject = () => {
-    if (!activeRequest) return;
-    setRequests(
-      requests.map((r) =>
-        r.id === activeRequest.id
-          ? {
-              ...r,
-              status: 'Rejected',
-              approvedBy: `${user?.name} (${user?.role})`,
-              rejectionReason: actionReason || 'Does not meet policy criteria',
-              validUntil: undefined
-            }
-          : r
-      )
-    );
-    setModalMode(null);
+  const handleReject = async () => {
+    if (!activeRequest || isProcessing) return;
+    setIsProcessing(true);
+    setActionError(null);
+
+    try {
+      const updated = await api.decideHybridRequest(activeRequest.id, 'reject', {
+        reason: actionReason || 'Does not meet policy criteria',
+        expectedVersion: activeRequest.version,
+      });
+
+      setRequests((prev) => prev.map((r) => (r.id === activeRequest.id ? { ...r, ...updated, status: 'Rejected' } : r)));
+      setModalMode(null);
+    } catch (err: any) {
+      console.error('Reject hybrid error:', err);
+      setActionError(err.message || 'Rejection could not be saved. Please retry.');
+      if (err.latest) {
+        setRequests((prev) => prev.map((r) => (r.id === activeRequest.id ? { ...r, ...err.latest } : r)));
+        setModalMode(null);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleRevoke = () => {
-    if (!activeRequest) return;
-    setRequests(
-      requests.map((r) =>
-        r.id === activeRequest.id
-          ? {
-              ...r,
-              status: 'Revoked',
-              rejectionReason: actionReason || `Revoked by ${user?.name}`
-            }
-          : r
-      )
-    );
-    setModalMode(null);
+  const handleRevoke = async () => {
+    if (!activeRequest || isProcessing) return;
+    setIsProcessing(true);
+    setActionError(null);
+
+    try {
+      const updated = await api.decideHybridRequest(activeRequest.id, 'revoke', {
+        reason: actionReason || `Revoked by ${user?.name}`,
+        expectedVersion: activeRequest.version,
+      });
+
+      setRequests((prev) => prev.map((r) => (r.id === activeRequest.id ? { ...r, ...updated, status: 'Revoked' } : r)));
+      setModalMode(null);
+    } catch (err: any) {
+      console.error('Revoke hybrid error:', err);
+      setActionError(err.message || 'Revocation could not be saved. Please retry.');
+      if (err.latest) {
+        setRequests((prev) => prev.map((r) => (r.id === activeRequest.id ? { ...r, ...err.latest } : r)));
+        setModalMode(null);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleSaveEdit = () => {
-    if (!activeRequest) return;
-    setRequests(
-      requests.map((r) =>
-        r.id === activeRequest.id
-          ? {
-              ...r,
-              status: editStatus,
-              approvedBy: editStatus === 'Approved' ? `${user?.name} (${user?.role})` : r.approvedBy,
-              validUntil: editStatus === 'Approved' ? validUntilDate : undefined,
-              rejectionReason:
-                editStatus === 'Rejected' || editStatus === 'Revoked'
-                  ? actionReason || `Updated by ${user?.name}`
-                  : undefined
-            }
-          : r
-      )
-    );
-    setModalMode(null);
+  const handleSaveEdit = async () => {
+    if (!activeRequest || isProcessing) return;
+    setIsProcessing(true);
+    setActionError(null);
+
+    try {
+      const updated = await api.decideHybridRequest(activeRequest.id, 'edit', {
+        status: editStatus,
+        validUntil: validUntilDate,
+        reason: actionReason,
+        expectedVersion: activeRequest.version,
+      });
+
+      setRequests((prev) => prev.map((r) => (r.id === activeRequest.id ? { ...r, ...updated } : r)));
+      setModalMode(null);
+    } catch (err: any) {
+      console.error('Edit hybrid error:', err);
+      setActionError(err.message || 'Update could not be saved.');
+      if (err.latest) {
+        setRequests((prev) => prev.map((r) => (r.id === activeRequest.id ? { ...r, ...err.latest } : r)));
+        setModalMode(null);
+      }
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -237,7 +228,7 @@ export const HybridApprovals: React.FC = () => {
               Hybrid Work Approvals & Authorization
             </h2>
             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-              user?.role === 'ADMIN' ? 'bg-purple-100 text-[#6338DF]' :
+              user?.role === 'ADMIN' ? 'bg-purple-100 text-[#6534E8]' :
               user?.role === 'HR' ? 'bg-blue-100 text-blue-700' :
               'bg-amber-100 text-amber-700'
             }`}>
@@ -266,8 +257,21 @@ export const HybridApprovals: React.FC = () => {
             onClick={() => setActionError(null)}
             className="text-red-500 hover:text-red-700 font-bold p-1"
           >
-            Ã—
+            ×
           </button>
+        </div>
+      )}
+
+      {/* Fetch Error Notification */}
+      {fetchError && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadRequests}>
+            Retry
+          </Button>
         </div>
       )}
 
@@ -276,8 +280,8 @@ export const HybridApprovals: React.FC = () => {
         <Card className="flex items-center justify-between border-l-4 border-amber-400">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase">Pending Review</p>
-            <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">{pendingCount}</h3>
-            <p className="text-xs text-amber-600 font-medium mt-0.5">Awaiting manager decision</p>
+            <h3 className="text-2xl font-extrabold text-[#151936] mt-1">{pendingCount}</h3>
+            <p className="text-xs text-amber-600 font-medium mt-0.5">Awaiting HR / Admin review</p>
           </div>
           <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
             <AlertCircle size={20} />
@@ -287,7 +291,7 @@ export const HybridApprovals: React.FC = () => {
         <Card className="flex items-center justify-between border-l-4 border-emerald-500">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase">Active Approvals</p>
-            <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">{approvedCount}</h3>
+            <h3 className="text-2xl font-extrabold text-[#151936] mt-1">{approvedCount}</h3>
             <p className="text-xs text-emerald-600 font-medium mt-0.5">Currently valid for remote</p>
           </div>
           <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -298,7 +302,7 @@ export const HybridApprovals: React.FC = () => {
         <Card className="flex items-center justify-between border-l-4 border-red-500">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase">Revoked / Terminated</p>
-            <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">{revokedCount}</h3>
+            <h3 className="text-2xl font-extrabold text-[#151936] mt-1">{revokedCount}</h3>
             <p className="text-xs text-red-600 font-medium mt-0.5">Early cancellation audit logged</p>
           </div>
           <div className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
@@ -316,7 +320,7 @@ export const HybridApprovals: React.FC = () => {
                 {isManager ? 'Assigned Team Hybrid Requests' : 'All Hybrid Attendance Requests'}
               </h3>
               <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full text-gray-600 font-mono">
-                {authorizedRequests.length} requests
+                {requests.length} requests
               </span>
             </div>
             <p className="text-xs text-gray-500">
@@ -340,20 +344,27 @@ export const HybridApprovals: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {authorizedRequests.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-xs text-gray-400">
+                    <Loader2 size={24} className="animate-spin mx-auto text-[#6534E8] mb-2" />
+                    Loading hybrid work applications...
+                  </td>
+                </tr>
+              ) : requests.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-xs text-gray-400">
                     No hybrid attendance requests found in your scope.
                   </td>
                 </tr>
               ) : (
-                authorizedRequests.map((req) => {
+                requests.map((req) => {
                   const isOwnRecord = req.empId === user?.id;
                   const canTakeAction = canApprove(req.empId);
 
                   return (
                     <tr key={req.id} className="hover:bg-purple-50/20 transition-colors">
-                      <td className="py-3.5 px-4 sm:px-6 font-mono text-xs font-bold text-[#6338DF]">
+                      <td className="py-3.5 px-4 sm:px-6 font-mono text-xs font-bold text-[#6534E8]">
                         {req.id}
                       </td>
 
@@ -361,17 +372,17 @@ export const HybridApprovals: React.FC = () => {
                         <div className="flex items-center gap-1.5">
                           <p className="font-semibold text-gray-900">{req.name}</p>
                           {isOwnRecord && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-[#6338DF]">
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-[#6534E8]">
                               You
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500 font-mono">{req.empId} â€¢ {req.department}</p>
+                        <p className="text-xs text-gray-500 font-mono">{req.empId} • {req.department}</p>
                       </td>
 
                       <td className="py-3.5 px-4 sm:px-6 text-xs text-gray-700">
                         <span className="flex items-center gap-1.5 font-medium">
-                          <Calendar size={13} className="text-[#6338DF]" />
+                          <Calendar size={13} className="text-[#6534E8]" />
                           {req.startDate} to {req.endDate}
                         </span>
                       </td>
@@ -396,8 +407,8 @@ export const HybridApprovals: React.FC = () => {
                           {req.validUntil && req.status === 'Approved' && (
                             <span className="text-[10px] text-gray-400">Valid until {req.validUntil}</span>
                           )}
-                          {req.approvedBy && (
-                            <span className="text-[10px] text-gray-500">By {req.approvedBy}</span>
+                          {req.processedBy && (
+                            <span className="text-[10px] text-gray-500">By {req.processedBy}</span>
                           )}
                           {req.rejectionReason && (
                             <span className="text-[10px] text-red-500">{req.rejectionReason}</span>
@@ -434,7 +445,7 @@ export const HybridApprovals: React.FC = () => {
                               icon={<Edit2 size={13} />}
                               onClick={() => handleOpenEdit(req)}
                               title="Edit decision"
-                              className="text-gray-700 hover:text-[#6338DF] hover:border-purple-200"
+                              className="text-gray-700 hover:text-[#6534E8] hover:border-purple-200"
                             >
                               Edit
                             </Button>
@@ -456,31 +467,36 @@ export const HybridApprovals: React.FC = () => {
       {modalMode === 'review' && activeRequest && (
         <Modal
           isOpen={true}
-          onClose={() => setModalMode(null)}
-          title={`Review Hybrid Work Request â€¢ ${activeRequest.id}`}
+          onClose={() => { if (!isProcessing) setModalMode(null); }}
+          title={`Review Hybrid Work Request • ${activeRequest.id}`}
           subtitle={`Employee: ${activeRequest.name} (${activeRequest.empId})`}
           badge="Awaiting Approval"
           footer={
             <div className="flex justify-end gap-2 w-full">
-              <Button variant="outline" onClick={() => setModalMode(null)}>
+              <Button variant="outline" disabled={isProcessing} onClick={() => setModalMode(null)}>
                 Cancel
               </Button>
               <Button
                 variant="outline"
+                disabled={isProcessing}
                 className="text-red-600 border-red-200 hover:bg-red-50"
                 onClick={handleReject}
               >
                 Reject Request
               </Button>
-              <Button onClick={handleApprove}>
-                Authorize & Approve
+              <Button
+                disabled={isProcessing}
+                onClick={handleApprove}
+                icon={isProcessing ? <Loader2 size={14} className="animate-spin" /> : undefined}
+              >
+                {isProcessing ? 'Saving...' : 'Authorize & Approve'}
               </Button>
             </div>
           }
         >
           <div className="space-y-4">
             <div className="p-3 bg-purple-50 rounded-xl border border-purple-100 text-xs space-y-1">
-              <p><span className="font-semibold text-gray-700">Requested Period:</span> {activeRequest.startDate} â€” {activeRequest.endDate}</p>
+              <p><span className="font-semibold text-gray-700">Requested Period:</span> {activeRequest.startDate} to {activeRequest.endDate}</p>
               <p><span className="font-semibold text-gray-700">Department:</span> {activeRequest.department}</p>
               <p><span className="font-semibold text-gray-700">Stated Reason:</span> {activeRequest.reason}</p>
             </div>
@@ -490,6 +506,7 @@ export const HybridApprovals: React.FC = () => {
               value={validUntilDate}
               onChange={(e) => setValidUntilDate(e.target.value)}
               placeholder="e.g. 20 Nov 2026"
+              disabled={isProcessing}
             />
 
             <div>
@@ -501,7 +518,8 @@ export const HybridApprovals: React.FC = () => {
                 onChange={(e) => setActionReason(e.target.value)}
                 placeholder="Optional explanation notes for the employee..."
                 rows={3}
-                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-[#6338DF]"
+                disabled={isProcessing}
+                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-[#6534E8]"
               />
             </div>
           </div>
@@ -512,21 +530,23 @@ export const HybridApprovals: React.FC = () => {
       {modalMode === 'revoke' && activeRequest && (
         <Modal
           isOpen={true}
-          onClose={() => setModalMode(null)}
-          title={`Revoke Hybrid Authorization â€¢ ${activeRequest.id}`}
+          onClose={() => { if (!isProcessing) setModalMode(null); }}
+          title={`Revoke Hybrid Authorization • ${activeRequest.id}`}
           subtitle={`Employee: ${activeRequest.name} (${activeRequest.empId})`}
           badge="Early Termination"
           footer={
             <div className="flex justify-end gap-2 w-full">
-              <Button variant="outline" onClick={() => setModalMode(null)}>
+              <Button variant="outline" disabled={isProcessing} onClick={() => setModalMode(null)}>
                 Cancel
               </Button>
               <Button
                 variant="primary"
+                disabled={isProcessing}
                 className="bg-red-600 hover:bg-red-700"
                 onClick={handleRevoke}
+                icon={isProcessing ? <Loader2 size={14} className="animate-spin" /> : undefined}
               >
-                Confirm Revocation
+                {isProcessing ? 'Revoking...' : 'Confirm Revocation'}
               </Button>
             </div>
           }
@@ -540,6 +560,7 @@ export const HybridApprovals: React.FC = () => {
               onChange={(e) => setActionReason(e.target.value)}
               placeholder="Reason for early cancellation..."
               rows={3}
+              disabled={isProcessing}
               className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-red-500"
             />
           </div>
@@ -550,17 +571,21 @@ export const HybridApprovals: React.FC = () => {
       {modalMode === 'edit' && activeRequest && (
         <Modal
           isOpen={true}
-          onClose={() => setModalMode(null)}
-          title={`Edit Decision â€¢ ${activeRequest.id}`}
+          onClose={() => { if (!isProcessing) setModalMode(null); }}
+          title={`Edit Decision • ${activeRequest.id}`}
           subtitle={`Employee: ${activeRequest.name}`}
           badge="Audit Adjustment"
           footer={
             <div className="flex justify-end gap-2 w-full">
-              <Button variant="outline" onClick={() => setModalMode(null)}>
+              <Button variant="outline" disabled={isProcessing} onClick={() => setModalMode(null)}>
                 Cancel
               </Button>
-              <Button onClick={handleSaveEdit}>
-                Save Decision Update
+              <Button
+                disabled={isProcessing}
+                onClick={handleSaveEdit}
+                icon={isProcessing ? <Loader2 size={14} className="animate-spin" /> : undefined}
+              >
+                {isProcessing ? 'Saving...' : 'Save Decision Update'}
               </Button>
             </div>
           }
@@ -573,6 +598,7 @@ export const HybridApprovals: React.FC = () => {
               <select
                 value={editStatus}
                 onChange={(e) => setEditStatus(e.target.value as HybridRequest['status'])}
+                disabled={isProcessing}
                 className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs"
               >
                 <option value="Approved">Approved</option>
@@ -587,6 +613,7 @@ export const HybridApprovals: React.FC = () => {
                 label="Valid Until Date"
                 value={validUntilDate}
                 onChange={(e) => setValidUntilDate(e.target.value)}
+                disabled={isProcessing}
               />
             )}
 
@@ -598,6 +625,7 @@ export const HybridApprovals: React.FC = () => {
                 value={actionReason}
                 onChange={(e) => setActionReason(e.target.value)}
                 rows={2}
+                disabled={isProcessing}
                 className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs"
               />
             </div>

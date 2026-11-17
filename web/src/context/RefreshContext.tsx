@@ -43,17 +43,17 @@ export const RefreshProvider: React.FC<{ children: ReactNode }> = ({ children })
         });
         await Promise.all(promises);
       } else {
-        // Default simulated network re-fetch delay if page has no custom callback
-        await new Promise((resolve) => setTimeout(resolve, 800));
+        // Fallback settling if page has no custom callback
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
       setLastRefreshed(new Date());
     } finally {
-      // Ensure smooth visual settling
+      // Clean settling without artificial delay
       setTimeout(() => {
         isRefreshingRef.current = false;
         setIsRefreshing(false);
-      }, 300);
+      }, 80);
     }
   }, []);
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, ReactNode } from 'react';
+﻿import React, { useState, useEffect, useRef, ReactNode } from 'react';
 import { ArrowDown, RotateCw, CheckCircle2 } from 'lucide-react';
 import { useRefresh } from '../context/RefreshContext';
 
@@ -125,20 +125,20 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({ children }) => {
             </>
           ) : isRefreshing ? (
             <>
-              <RotateCw size={15} className="text-[#6338DF] animate-spin" />
+              <RotateCw size={15} className="text-[#6534E8] animate-spin" />
               <span className="text-gray-800">Refreshing HRMS data...</span>
             </>
           ) : (
             <>
               <div
-                className="w-5 h-5 rounded-full bg-purple-50 flex items-center justify-center text-[#6338DF] transition-transform duration-150"
+                className="w-5 h-5 rounded-full bg-purple-50 flex items-center justify-center text-[#6534E8] transition-transform duration-150"
                 style={{
                   transform: `rotate(${isReadyToRelease ? 180 : pullProgress * 140}deg)`,
                 }}
               >
                 <ArrowDown size={13} />
               </div>
-              <span className={isReadyToRelease ? 'text-[#6338DF] font-bold' : 'text-gray-500'}>
+              <span className={isReadyToRelease ? 'text-[#6534E8] font-bold' : 'text-gray-500'}>
                 {isReadyToRelease ? 'Release to refresh' : 'Pull down to refresh'}
               </span>
             </>

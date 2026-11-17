@@ -11,19 +11,19 @@ export const Card: React.FC<CardProps> = ({
   children,
   className = '',
   padding = 'md',
-  hoverable = false
+  hoverable = false,
 }) => {
   const paddingStyles = {
     none: '',
     sm: 'p-4',
     md: 'p-5 sm:p-6',
-    lg: 'p-6 sm:p-8'
+    lg: 'p-6 sm:p-8',
   };
 
   return (
     <div
-      className={`bg-white rounded-xl border border-gray-100 shadow-sm ${
-        hoverable ? 'hover:shadow-md transition-shadow' : ''
+      className={`bg-white rounded-xl border border-[#E5E2F0] shadow-card ${
+        hoverable ? 'hover:shadow-md hover:border-purple-200/80 transition-all' : ''
       } ${paddingStyles[padding]} ${className}`}
     >
       {children}

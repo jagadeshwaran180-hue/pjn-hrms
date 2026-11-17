@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Search,
   Filter,
@@ -10,14 +10,23 @@ import {
   Building2,
   Mail,
   Calendar,
-  Briefcase
+  Briefcase,
+  Loader2,
+  AlertTriangle,
+  ShieldAlert
 } from 'lucide-react';
-import { mockEmployees } from '../data/mockData';
 import { Employee } from '../types';
 import { Card, Badge, Button, Input, Modal, EmptyState } from '../components/ui';
+import { useRefresh } from '../context/RefreshContext';
+import * as api from '../services/api';
 
 export const EmployeeList: React.FC = () => {
-  const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
+  const { registerRefreshHandler } = useRefresh();
+
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -27,6 +36,8 @@ export const EmployeeList: React.FC = () => {
   // Selected employee for modal
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add' | null>(null);
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Add/Edit Form State
   const [formData, setFormData] = useState({
@@ -38,6 +49,29 @@ export const EmployeeList: React.FC = () => {
     status: 'Active' as Employee['status'],
     joinDate: '16 Nov 2026'
   });
+
+  const loadEmployees = useCallback(async () => {
+    try {
+      setFetchError(null);
+      const data = await api.getEmployees();
+      setEmployees(data);
+    } catch (err: any) {
+      console.error('Failed to load employees:', err);
+      setFetchError(err.message || 'Unable to retrieve employee list.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadEmployees();
+  }, [loadEmployees]);
+
+  useEffect(() => {
+    return registerRefreshHandler(async () => {
+      await loadEmployees();
+    });
+  }, [registerRefreshHandler, loadEmployees]);
 
   // Departments list
   const departments = useMemo(() => {
@@ -68,6 +102,7 @@ export const EmployeeList: React.FC = () => {
   }, [filteredEmployees, currentPage]);
 
   const handleOpenModal = (mode: 'view' | 'edit' | 'add', emp?: Employee) => {
+    setFormError(null);
     setModalMode(mode);
     if (emp) {
       setSelectedEmployee(emp);
@@ -96,26 +131,56 @@ export const EmployeeList: React.FC = () => {
   };
 
   const handleCloseModal = () => {
+    if (formSubmitting) return;
     setModalMode(null);
     setSelectedEmployee(null);
   };
 
-  const handleSaveEmployee = (e: React.FormEvent) => {
+  const handleSaveEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (modalMode === 'add') {
-      const newEmp: Employee = {
-        ...formData,
-        id: formData.id || `EMP-0${employees.length + 1}`
-      };
-      setEmployees([newEmp, ...employees]);
-    } else if (modalMode === 'edit' && selectedEmployee) {
-      setEmployees(
-        employees.map((emp) =>
-          emp.id === selectedEmployee.id ? { ...emp, ...formData } : emp
-        )
-      );
+    setFormError(null);
+
+    if (!formData.name.trim()) {
+      setFormError('Please provide employee full name.');
+      return;
     }
-    handleCloseModal();
+    if (!formData.email.trim() || !formData.email.includes('@')) {
+      setFormError('Please provide a valid work email.');
+      return;
+    }
+    if (!formData.designation.trim()) {
+      setFormError('Please enter the employee designation.');
+      return;
+    }
+
+    setFormSubmitting(true);
+    try {
+      if (modalMode === 'add') {
+        const newEmp = await api.createEmployee({
+          ...formData,
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          designation: formData.designation.trim(),
+        });
+        setEmployees((prev) => [newEmp, ...prev]);
+      } else if (modalMode === 'edit' && selectedEmployee) {
+        const updated = await api.updateEmployee(selectedEmployee.id, {
+          ...formData,
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          designation: formData.designation.trim(),
+        });
+        setEmployees((prev) =>
+          prev.map((emp) => (emp.id === selectedEmployee.id ? { ...emp, ...updated } : emp))
+        );
+      }
+      handleCloseModal();
+    } catch (err: any) {
+      console.error('Save employee error:', err);
+      setFormError(err.message || 'Failed to save employee profile. Please retry.');
+    } finally {
+      setFormSubmitting(false);
+    }
   };
 
   return (
@@ -139,6 +204,19 @@ export const EmployeeList: React.FC = () => {
         </Button>
       </div>
 
+      {/* Fetch Error Notification */}
+      {fetchError && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadEmployees}>
+            Retry
+          </Button>
+        </div>
+      )}
+
       {/* 2. Search & Filters Bar */}
       <Card padding="sm" className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
         {/* Search */}
@@ -158,48 +236,38 @@ export const EmployeeList: React.FC = () => {
             <span>Filters:</span>
           </div>
 
-          {/* Department Filter */}
           <select
             value={departmentFilter}
             onChange={(e) => { setDepartmentFilter(e.target.value); setCurrentPage(1); }}
-            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#6338DF]"
+            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#6534E8]"
           >
-            {departments.map((d) => (
-              <option key={d} value={d}>Dept: {d}</option>
+            {departments.map((dept) => (
+              <option key={dept} value={dept}>
+                {dept === 'All' ? 'All Departments' : dept}
+              </option>
             ))}
           </select>
 
-          {/* Status Filter */}
           <select
             value={statusFilter}
             onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#6338DF]"
+            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#6534E8]"
           >
-            <option value="All">Status: All</option>
+            <option value="All">All Statuses</option>
             <option value="Active">Active</option>
             <option value="On Leave">On Leave</option>
             <option value="Inactive">Inactive</option>
           </select>
-
-          {(searchTerm || departmentFilter !== 'All' || statusFilter !== 'All') && (
-            <button
-              onClick={() => { setSearchTerm(''); setDepartmentFilter('All'); setStatusFilter('All'); setCurrentPage(1); }}
-              className="text-xs text-[#6338DF] hover:underline px-2 py-1 font-medium"
-            >
-              Reset
-            </button>
-          )}
         </div>
       </Card>
 
-      {/* 3. Table Container */}
+      {/* 3. Employee Table */}
       <Card padding="none" className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-gray-50/75 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                <th className="py-3.5 px-4 sm:px-6">Employee ID</th>
-                <th className="py-3.5 px-4 sm:px-6">Employee Name</th>
+                <th className="py-3.5 px-4 sm:px-6">Employee</th>
                 <th className="py-3.5 px-4 sm:px-6">Department</th>
                 <th className="py-3.5 px-4 sm:px-6">Designation</th>
                 <th className="py-3.5 px-4 sm:px-6">Email</th>
@@ -208,34 +276,54 @@ export const EmployeeList: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {paginatedEmployees.length > 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-xs text-gray-400">
+                    <Loader2 size={24} className="animate-spin mx-auto text-[#6534E8] mb-2" />
+                    Loading employee workforce directory...
+                  </td>
+                </tr>
+              ) : filteredEmployees.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12">
+                    <EmptyState
+                      title="No employees found"
+                      description="No employee records matched your search query or active filter selections."
+                    />
+                  </td>
+                </tr>
+              ) : (
                 paginatedEmployees.map((emp) => (
-                  <tr key={emp.id} className="hover:bg-purple-50/20 transition-colors">
-                    <td className="py-3.5 px-4 sm:px-6 font-mono text-xs font-semibold text-[#6338DF]">
-                      {emp.id}
-                    </td>
-
+                  <tr key={emp.id} className="hover:bg-purple-50/30 transition-colors">
+                    {/* Employee Name & ID */}
                     <td className="py-3.5 px-4 sm:px-6">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-purple-100 text-[#6338DF] font-bold text-xs flex items-center justify-center shrink-0">
+                        <div className="w-9 h-9 rounded-full bg-purple-100 text-[#6534E8] font-bold text-xs flex items-center justify-center shrink-0">
                           {emp.name.charAt(0)}
                         </div>
-                        <span className="font-semibold text-gray-900">{emp.name}</span>
+                        <div>
+                          <p className="font-semibold text-gray-900 leading-tight">{emp.name}</p>
+                          <p className="text-xs font-mono text-[#6534E8] mt-0.5">{emp.id}</p>
+                        </div>
                       </div>
                     </td>
 
-                    <td className="py-3.5 px-4 sm:px-6 text-gray-600 font-medium">
+                    {/* Department */}
+                    <td className="py-3.5 px-4 sm:px-6 text-gray-700 font-medium">
                       {emp.department}
                     </td>
 
+                    {/* Designation */}
                     <td className="py-3.5 px-4 sm:px-6 text-gray-600">
                       {emp.designation}
                     </td>
 
-                    <td className="py-3.5 px-4 sm:px-6 text-gray-500 font-mono text-xs">
+                    {/* Email */}
+                    <td className="py-3.5 px-4 sm:px-6 text-gray-600 font-mono text-xs">
                       {emp.email}
                     </td>
 
+                    {/* Status Badge */}
                     <td className="py-3.5 px-4 sm:px-6">
                       <Badge
                         variant={
@@ -243,26 +331,27 @@ export const EmployeeList: React.FC = () => {
                             ? 'present'
                             : emp.status === 'On Leave'
                             ? 'pending'
-                            : 'neutral'
+                            : 'absent'
                         }
                       >
                         {emp.status}
                       </Badge>
                     </td>
 
+                    {/* Actions */}
                     <td className="py-3.5 px-4 sm:px-6 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => handleOpenModal('view', emp)}
-                          title="View Profile Details"
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-[#6338DF] hover:bg-purple-50 transition-colors"
+                          title="View Profile"
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-[#6534E8] hover:bg-purple-50 transition-colors"
                         >
                           <Eye size={16} />
                         </button>
                         <button
                           onClick={() => handleOpenModal('edit', emp)}
                           title="Edit Employee"
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-[#6338DF] hover:bg-purple-50 transition-colors"
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-[#6534E8] hover:bg-purple-50 transition-colors"
                         >
                           <Edit2 size={16} />
                         </button>
@@ -270,62 +359,54 @@ export const EmployeeList: React.FC = () => {
                     </td>
                   </tr>
                 ))
-              ) : (
-                <tr>
-                  <td colSpan={7}>
-                    <EmptyState
-                      title="No employees found"
-                      description="Try adjusting your search criteria or resetting filters."
-                      action={
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => { setSearchTerm(''); setDepartmentFilter('All'); setStatusFilter('All'); }}
-                        >
-                          Clear Filters
-                        </Button>
-                      }
-                    />
-                  </td>
-                </tr>
               )}
             </tbody>
           </table>
         </div>
 
         {/* 4. Table Pagination Footer */}
-        <div className="px-4 sm:px-6 py-3.5 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-          <div>
-            Showing <span className="font-semibold text-gray-800">{filteredEmployees.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}</span> to{' '}
-            <span className="font-semibold text-gray-800">
-              {Math.min(currentPage * itemsPerPage, filteredEmployees.length)}
-            </span>{' '}
-            of <span className="font-semibold text-gray-800">{filteredEmployees.length}</span> employees
-          </div>
+        {filteredEmployees.length > 0 && (
+          <div className="p-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500">
+            <div>
+              Showing{' '}
+              <span className="font-semibold text-gray-700">
+                {(currentPage - 1) * itemsPerPage + 1}
+              </span>{' '}
+              to{' '}
+              <span className="font-semibold text-gray-700">
+                {Math.min(currentPage * itemsPerPage, filteredEmployees.length)}
+              </span>{' '}
+              of <span className="font-semibold text-gray-700">{filteredEmployees.length}</span> personnel
+            </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-              disabled={currentPage === 1}
-              className="p-1.5 rounded border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft size={16} />
-            </button>
-            <span className="px-2 font-medium">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className="p-1.5 rounded border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronRight size={16} />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                icon={<ChevronLeft size={14} />}
+              >
+                Previous
+              </Button>
+              <span className="px-2 font-medium text-gray-700">
+                Page {currentPage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                icon={<ChevronRight size={14} />}
+              >
+                Next
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </Card>
 
-      {/* 5. Employee Modal (View / Edit / Add) */}
+      {/* 5. View / Edit / Add Employee Modal */}
       <Modal
         isOpen={modalMode !== null}
         onClose={handleCloseModal}
@@ -333,32 +414,54 @@ export const EmployeeList: React.FC = () => {
           modalMode === 'add'
             ? 'Add New Employee'
             : modalMode === 'edit'
-            ? `Edit Employee: ${selectedEmployee?.name}`
-            : `Employee Profile: ${selectedEmployee?.name}`
+            ? `Edit Employee Profile • ${formData.id}`
+            : 'Employee Profile Details'
         }
-        subtitle="Manage employee attributes and department assignment"
-        badge={modalMode === 'view' ? selectedEmployee?.id : 'Day 3 UI'}
+        subtitle={
+          modalMode === 'add'
+            ? 'Enter complete details to onboard an enterprise team member'
+            : modalMode === 'edit'
+            ? 'Update employee organization parameters'
+            : `System profile verification for ${selectedEmployee?.name}`
+        }
+        badge={modalMode === 'add' ? 'Onboarding' : modalMode === 'edit' ? 'Admin Action' : 'Read Only'}
         footer={
           modalMode === 'view' ? (
-            <Button variant="outline" size="sm" onClick={handleCloseModal}>
+            <Button size="sm" onClick={handleCloseModal}>
               Close
             </Button>
           ) : (
             <>
-              <Button variant="outline" size="sm" onClick={handleCloseModal}>
+              <Button variant="outline" size="sm" disabled={formSubmitting} onClick={handleCloseModal}>
                 Cancel
               </Button>
-              <Button size="sm" onClick={handleSaveEmployee}>
-                {modalMode === 'add' ? 'Create Employee' : 'Save Changes'}
+              <Button
+                size="sm"
+                disabled={formSubmitting}
+                onClick={handleSaveEmployee}
+                icon={formSubmitting ? <Loader2 size={14} className="animate-spin" /> : undefined}
+              >
+                {formSubmitting
+                  ? 'Saving...'
+                  : modalMode === 'add'
+                  ? 'Create Employee'
+                  : 'Save Changes'}
               </Button>
             </>
           )
         }
       >
+        {formError && (
+          <div className="mb-3 p-3 bg-red-50 rounded-xl border border-red-200 text-xs text-red-700 font-semibold flex items-center gap-2">
+            <ShieldAlert size={15} className="shrink-0" />
+            <span>{formError}</span>
+          </div>
+        )}
+
         {modalMode === 'view' && selectedEmployee ? (
           <div className="space-y-4">
             <div className="flex items-center gap-4 p-4 rounded-xl bg-purple-50/50 border border-purple-100">
-              <div className="w-14 h-14 rounded-2xl bg-[#6338DF] text-white flex items-center justify-center font-bold text-xl shadow-md">
+              <div className="w-14 h-14 rounded-2xl bg-[#6534E8] text-white flex items-center justify-center font-bold text-xl shadow-md">
                 {selectedEmployee.name.charAt(0)}
               </div>
               <div>
@@ -414,13 +517,15 @@ export const EmployeeList: React.FC = () => {
                 label="Employee ID"
                 value={formData.id}
                 onChange={(e) => setFormData({ ...formData, id: e.target.value })}
+                disabled={formSubmitting || modalMode === 'edit'}
                 required
               />
               <Input
-                label="Full Name"
+                label="Full Name *"
                 placeholder="e.g. John Doe"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                disabled={formSubmitting}
                 required
               />
             </div>
@@ -433,7 +538,8 @@ export const EmployeeList: React.FC = () => {
                 <select
                   value={formData.department}
                   onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  className="w-full py-2.5 px-3 bg-gray-50/50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#6338DF]"
+                  disabled={formSubmitting}
+                  className="w-full py-2.5 px-3 bg-gray-50/50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#6534E8]"
                 >
                   <option value="Engineering">Engineering</option>
                   <option value="Mobile Apps">Mobile Apps</option>
@@ -446,20 +552,22 @@ export const EmployeeList: React.FC = () => {
               </div>
 
               <Input
-                label="Designation"
+                label="Designation *"
                 placeholder="e.g. Frontend Engineer"
                 value={formData.designation}
                 onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                disabled={formSubmitting}
                 required
               />
             </div>
 
             <Input
-              label="Work Email"
+              label="Work Email *"
               type="email"
               placeholder="e.g. name@pjntech.com"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              disabled={formSubmitting}
               required
             />
 
@@ -470,7 +578,8 @@ export const EmployeeList: React.FC = () => {
               <select
                 value={formData.status}
                 onChange={(e) => setFormData({ ...formData, status: e.target.value as Employee['status'] })}
-                className="w-full py-2.5 px-3 bg-gray-50/50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#6338DF]"
+                disabled={formSubmitting}
+                className="w-full py-2.5 px-3 bg-gray-50/50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#6534E8]"
               >
                 <option value="Active">Active</option>
                 <option value="On Leave">On Leave</option>

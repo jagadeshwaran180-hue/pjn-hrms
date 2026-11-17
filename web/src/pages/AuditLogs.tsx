@@ -1,14 +1,15 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  ShieldAlert,
   Search,
   Filter,
-  CheckCircle2,
-  XCircle,
   FileSpreadsheet,
-  Clock
+  Clock,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { Card, Badge, Button, Input } from '../components/ui';
+import { useRefresh } from '../context/RefreshContext';
+import * as api from '../services/api';
 
 interface AuditEntry {
   id: string;
@@ -21,75 +22,58 @@ interface AuditEntry {
   status: 'SUCCESS' | 'WARNING' | 'FAILED';
 }
 
-const mockAuditLogs: AuditEntry[] = [
-  {
-    id: 'AUD-901',
-    timestamp: '16 Nov 2026, 03:45 PM',
-    actor: 'admin@pjntech.com',
-    role: 'ADMIN',
-    action: 'Approved Hybrid Work Authorization',
-    target: 'Request #HYB-202 (Ayesha N)',
-    ipAddress: '106.51.78.12',
-    status: 'SUCCESS'
-  },
-  {
-    id: 'AUD-902',
-    timestamp: '16 Nov 2026, 02:30 PM',
-    actor: 'admin@pjntech.com',
-    role: 'ADMIN',
-    action: 'Updated Branch Geofence Radius',
-    target: 'Branch BLR-HQ (100m validated)',
-    ipAddress: '106.51.78.12',
-    status: 'SUCCESS'
-  },
-  {
-    id: 'AUD-903',
-    timestamp: '16 Nov 2026, 01:15 PM',
-    actor: 'jagadeesh@pjntech.com',
-    role: 'EMPLOYEE',
-    action: 'In-House Attendance Check-In',
-    target: 'Branch BLR-HQ (24m inside radius)',
-    ipAddress: '192.168.1.45',
-    status: 'SUCCESS'
-  },
-  {
-    id: 'AUD-904',
-    timestamp: '16 Nov 2026, 11:20 AM',
-    actor: 'rahul@pjntech.com',
-    role: 'EMPLOYEE',
-    action: 'Geofence Perimeter Warning',
-    target: 'Check-in attempted 120m from office',
-    ipAddress: '49.207.210.88',
-    status: 'WARNING'
-  },
-  {
-    id: 'AUD-905',
-    timestamp: '16 Nov 2026, 09:40 AM',
-    actor: 'guest_ip_blocked',
-    role: 'UNKNOWN',
-    action: 'Failed Login Attempt (Invalid Password)',
-    target: 'Account: hr_lead@pjntech.com',
-    ipAddress: '185.220.101.5',
-    status: 'FAILED'
-  },
-  {
-    id: 'AUD-906',
-    timestamp: '15 Nov 2026, 05:10 PM',
-    actor: 'admin@pjntech.com',
-    role: 'ADMIN',
-    action: 'Revoked Hybrid Attendance',
-    target: 'Request #HYB-204 (Rahul M)',
-    ipAddress: '106.51.78.12',
-    status: 'SUCCESS'
-  }
-];
-
 export const AuditLogs: React.FC = () => {
+  const { registerRefreshHandler } = useRefresh();
+
+  const [logs, setLogs] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
 
+  const loadAuditLogs = useCallback(async () => {
+    try {
+      setFetchError(null);
+      const data = await api.getAuditLogs();
+      setLogs(data);
+    } catch (err: any) {
+      console.error('Failed to load audit logs:', err);
+      setFetchError(err.message || 'Unable to retrieve system audit logs.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAuditLogs();
+  }, [loadAuditLogs]);
+
+  useEffect(() => {
+    return registerRefreshHandler(async () => {
+      await loadAuditLogs();
+    });
+  }, [registerRefreshHandler, loadAuditLogs]);
+
+  const handleExportCSV = () => {
+    if (filteredLogs.length === 0) {
+      alert('No audit log entries to export.');
+      return;
+    }
+
+    const header = 'ID,Timestamp,Actor,Role,Action,Target,IP Address,Status\n';
+    const rows = filteredLogs
+      .map(
+        (l) =>
+          `"${l.id}","${l.timestamp}","${l.actor}","${l.role}","${l.action}","${l.target}","${l.ipAddress}","${l.status}"`
+      )
+      .join('\n');
+
+    api.downloadCSV(`PJN_Audit_Trail_${new Date().toISOString().split('T')[0]}.csv`, header + rows);
+  };
+
   const filteredLogs = useMemo(() => {
-    return mockAuditLogs.filter((log) => {
+    return logs.filter((log) => {
       const matchSearch =
         log.actor.toLowerCase().includes(searchTerm.toLowerCase()) ||
         log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -97,7 +81,7 @@ export const AuditLogs: React.FC = () => {
       const matchStatus = statusFilter === 'All' || log.status === statusFilter;
       return matchSearch && matchStatus;
     });
-  }, [searchTerm, statusFilter]);
+  }, [logs, searchTerm, statusFilter]);
 
   return (
     <div className="space-y-6">
@@ -116,11 +100,23 @@ export const AuditLogs: React.FC = () => {
           variant="outline"
           size="sm"
           icon={<FileSpreadsheet size={15} />}
-          onClick={() => alert('Exporting audit log trail...')}
+          onClick={handleExportCSV}
         >
-          Export Audit Trail
+          Export Audit Trail CSV
         </Button>
       </div>
+
+      {fetchError && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadAuditLogs}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* 2. Filter Bar */}
       <Card padding="sm" className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
@@ -138,7 +134,7 @@ export const AuditLogs: React.FC = () => {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-700"
+            className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#6534E8]"
           >
             <option value="All">All Event Outcomes</option>
             <option value="SUCCESS">Success Only</option>
@@ -159,55 +155,68 @@ export const AuditLogs: React.FC = () => {
                 <th className="py-3.5 px-4 sm:px-6">Action Performed</th>
                 <th className="py-3.5 px-4 sm:px-6">Target Resource</th>
                 <th className="py-3.5 px-4 sm:px-6">IP Address</th>
-                <th className="py-3.5 px-4 sm:px-6 text-right">Status</th>
+                <th className="py-3.5 px-4 sm:px-6 text-right">Result</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredLogs.map((entry) => (
-                <tr key={entry.id} className="hover:bg-purple-50/20 transition-colors">
-                  <td className="py-3.5 px-4 sm:px-6">
-                    <p className="font-mono text-xs font-bold text-[#6338DF]">{entry.id}</p>
-                    <p className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
-                      <Clock size={11} /> {entry.timestamp}
-                    </p>
-                  </td>
-
-                  <td className="py-3.5 px-4 sm:px-6">
-                    <p className="font-semibold text-gray-900 text-xs sm:text-sm">{entry.actor}</p>
-                    <Badge variant="neutral" className="mt-0.5 text-[10px]">{entry.role}</Badge>
-                  </td>
-
-                  <td className="py-3.5 px-4 sm:px-6 font-medium text-gray-800 text-xs sm:text-sm">
-                    {entry.action}
-                  </td>
-
-                  <td className="py-3.5 px-4 sm:px-6 text-xs text-gray-600 font-mono">
-                    {entry.target}
-                  </td>
-
-                  <td className="py-3.5 px-4 sm:px-6 text-xs text-gray-500 font-mono">
-                    {entry.ipAddress}
-                  </td>
-
-                  <td className="py-3.5 px-4 sm:px-6 text-right">
-                    {entry.status === 'SUCCESS' && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <CheckCircle2 size={12} /> Success
-                      </span>
-                    )}
-                    {entry.status === 'WARNING' && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                        <ShieldAlert size={12} /> Warning
-                      </span>
-                    )}
-                    {entry.status === 'FAILED' && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
-                        <XCircle size={12} /> Failed
-                      </span>
-                    )}
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-xs text-gray-400">
+                    <Loader2 size={24} className="animate-spin mx-auto text-[#6534E8] mb-2" />
+                    Loading audit trail entries...
                   </td>
                 </tr>
-              ))}
+              ) : filteredLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-xs text-gray-400">
+                    No audit records found matching the filter criteria.
+                  </td>
+                </tr>
+              ) : (
+                filteredLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-purple-50/20 transition-colors">
+                    <td className="py-3.5 px-4 sm:px-6">
+                      <p className="font-mono text-xs font-bold text-[#6534E8]">{log.id}</p>
+                      <p className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
+                        <Clock size={11} /> {log.timestamp}
+                      </p>
+                    </td>
+
+                    <td className="py-3.5 px-4 sm:px-6">
+                      <p className="font-semibold text-gray-800 text-xs">{log.actor}</p>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-mono">
+                        {log.role}
+                      </span>
+                    </td>
+
+                    <td className="py-3.5 px-4 sm:px-6 text-xs font-medium text-gray-900">
+                      {log.action}
+                    </td>
+
+                    <td className="py-3.5 px-4 sm:px-6 text-xs text-gray-600 max-w-xs truncate" title={log.target}>
+                      {log.target}
+                    </td>
+
+                    <td className="py-3.5 px-4 sm:px-6 font-mono text-xs text-gray-500">
+                      {log.ipAddress}
+                    </td>
+
+                    <td className="py-3.5 px-4 sm:px-6 text-right">
+                      <Badge
+                        variant={
+                          log.status === 'SUCCESS'
+                            ? 'present'
+                            : log.status === 'WARNING'
+                            ? 'pending'
+                            : 'absent'
+                        }
+                      >
+                        {log.status}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

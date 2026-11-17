@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import {
   FileCheck2,
   Plus,
@@ -7,10 +7,14 @@ import {
   Check,
   X,
   ShieldAlert,
-  Lock
+  Lock,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { Card, Badge, Button, Input, Modal } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
+import { useRefresh } from '../context/RefreshContext';
+import * as api from '../services/api';
 
 interface RegularizationRequest {
   id: string;
@@ -24,81 +28,24 @@ interface RegularizationRequest {
   reason: string;
   status: 'Pending' | 'Approved' | 'Rejected';
   appliedOn: string;
+  processedBy?: string;
+  processedAt?: string;
+  version: number;
 }
-
-const initialRequests: RegularizationRequest[] = [
-  {
-    id: 'REG-501',
-    empId: 'EMP-001',
-    name: 'Jagadeesh K',
-    department: 'Engineering',
-    date: '14 Nov 2026',
-    originalPunch: 'Check-In: 09:15 AM | Check-Out: --:--',
-    requestedPunch: 'Check-Out: 06:30 PM',
-    type: 'Missed Check-Out',
-    reason: 'Left in a hurry for team client deployment meeting; forgot mobile punch',
-    status: 'Pending',
-    appliedOn: '15 Nov 2026'
-  },
-  {
-    id: 'REG-502',
-    empId: 'EMP-004',
-    name: 'Ayesha N',
-    department: 'Backend',
-    date: '12 Nov 2026',
-    originalPunch: 'Check-In: --:-- | Check-Out: 06:10 PM',
-    requestedPunch: 'Check-In: 09:30 AM',
-    type: 'GPS Timeout / Device Glitch',
-    reason: 'Mobile OS location services were updating; logged on-site manually with security',
-    status: 'Approved',
-    appliedOn: '13 Nov 2026'
-  },
-  {
-    id: 'REG-503',
-    empId: 'EMP-007',
-    name: 'Rahul M',
-    department: 'DevOps & Cloud',
-    date: '11 Nov 2026',
-    originalPunch: 'Check-In: 10:45 AM | Check-Out: 07:15 PM',
-    requestedPunch: 'Check-In: 09:00 AM (Client Location)',
-    type: 'On-Duty Client Visit',
-    reason: 'Traveled directly to AWS data center for physical rack inspection',
-    status: 'Approved',
-    appliedOn: '11 Nov 2026'
-  },
-  {
-    id: 'REG-504',
-    empId: 'EMP-003',
-    name: 'Karthick R',
-    department: 'Mobile Apps',
-    date: '15 Nov 2026',
-    originalPunch: 'Check-In: 09:40 AM | Check-Out: 06:15 PM',
-    requestedPunch: 'Check-In: 09:05 AM',
-    type: 'GPS Timeout / Device Glitch',
-    reason: 'Android GPS geofence flutter at reception entrance',
-    status: 'Pending',
-    appliedOn: '16 Nov 2026'
-  },
-  {
-    id: 'REG-505',
-    empId: 'EMP-002',
-    name: 'Imran M',
-    department: 'Engineering',
-    date: '13 Nov 2026',
-    originalPunch: 'Check-In: 09:10 AM | Check-Out: --:--',
-    requestedPunch: 'Check-Out: 07:00 PM',
-    type: 'Missed Check-Out',
-    reason: 'Evening client sync extended past standard office hours',
-    status: 'Pending',
-    appliedOn: '14 Nov 2026'
-  }
-];
 
 export const AttendanceRegularization: React.FC = () => {
   const { user, canApprove } = useAuth();
-  const [requests, setRequests] = useState<RegularizationRequest[]>(initialRequests);
+  const { registerRefreshHandler } = useRefresh();
+
+  const [requests, setRequests] = useState<RegularizationRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const isEmployee = user?.role === 'EMPLOYEE';
   const isManager = user?.role === 'MANAGER';
@@ -112,26 +59,35 @@ export const AttendanceRegularization: React.FC = () => {
     reason: ''
   });
 
-  // Filter requests strictly based on role & record ownership
-  const authorizedRequests = useMemo(() => {
-    return requests.filter((r) => {
-      // 1. Employee: only their own requests
-      if (isEmployee) {
-        return r.empId === user?.id;
-      }
-      // 2. Manager: their own requests + requests of their assigned team members
-      if (isManager) {
-        return r.empId === user?.id || (user?.managedTeam && user.managedTeam.includes(r.empId));
-      }
-      // 3. Admin / HR: all requests
-      return true;
-    });
-  }, [requests, isEmployee, isManager, user]);
+  // Fetch from backend
+  const loadRequests = useCallback(async () => {
+    try {
+      setFetchError(null);
+      const data = await api.getRegularizationRequests();
+      setRequests(data);
+    } catch (err: any) {
+      console.error('Failed to load regularization requests:', err);
+      setFetchError(err.message || 'Unable to load punch regularization requests.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const handleApprove = (id: string, recordOwnerId: string) => {
+  useEffect(() => {
+    loadRequests();
+  }, [loadRequests]);
+
+  // Hook into global RefreshContext
+  useEffect(() => {
+    return registerRefreshHandler(async () => {
+      await loadRequests();
+    });
+  }, [registerRefreshHandler, loadRequests]);
+
+  const handleApprove = async (id: string, recordOwnerId: string, version: number) => {
+    if (processingId) return;
     setActionError(null);
 
-    // Enforce approval policy check
     if (!canApprove(recordOwnerId)) {
       if (user?.id === recordOwnerId) {
         setActionError('Policy Violation: Self-approval is strictly forbidden. Managers cannot approve their own requests.');
@@ -141,10 +97,23 @@ export const AttendanceRegularization: React.FC = () => {
       return;
     }
 
-    setRequests(requests.map((r) => (r.id === id ? { ...r, status: 'Approved' } : r)));
+    setProcessingId(id);
+    try {
+      const updated = await api.decideRegularizationRequest(id, 'Approved', undefined, version);
+      setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, ...updated, status: 'Approved' } : r)));
+    } catch (err: any) {
+      console.error('Regularization approval failed:', err);
+      setActionError(err.message || 'Approval decision could not be saved. Please retry.');
+      if (err.latest) {
+        setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, ...err.latest } : r)));
+      }
+    } finally {
+      setProcessingId(null);
+    }
   };
 
-  const handleReject = (id: string, recordOwnerId: string) => {
+  const handleReject = async (id: string, recordOwnerId: string, version: number) => {
+    if (processingId) return;
     setActionError(null);
 
     if (!canApprove(recordOwnerId)) {
@@ -156,30 +125,73 @@ export const AttendanceRegularization: React.FC = () => {
       return;
     }
 
-    setRequests(requests.map((r) => (r.id === id ? { ...r, status: 'Rejected' } : r)));
+    setProcessingId(id);
+    try {
+      const updated = await api.decideRegularizationRequest(
+        id,
+        'Rejected',
+        'Regularization rejected per office security and badge scan records',
+        version
+      );
+      setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, ...updated, status: 'Rejected' } : r)));
+    } catch (err: any) {
+      console.error('Regularization rejection failed:', err);
+      setActionError(err.message || 'Rejection decision could not be saved. Please retry.');
+      if (err.latest) {
+        setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, ...err.latest } : r)));
+      }
+    } finally {
+      setProcessingId(null);
+    }
   };
 
-  const handleSaveRequest = (e: React.FormEvent) => {
+  const handleSaveRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
 
-    // Derive identity securely from authenticated session
-    const newReq: RegularizationRequest = {
-      id: `REG-${500 + requests.length + 1}`,
-      empId: user?.id || 'EMP-001',
-      name: user?.name || 'Employee',
-      department: user?.department || 'Engineering',
-      date: form.date,
-      originalPunch: form.originalPunch,
-      requestedPunch: form.requestedPunch,
-      type: form.type,
-      reason: form.reason || 'Attendance correction submitted',
-      status: 'Pending',
-      appliedOn: '17 Nov 2026'
-    };
+    if (!form.date.trim()) {
+      setFormError('Please select or specify the incident date.');
+      return;
+    }
+    if (!form.requestedPunch.trim()) {
+      setFormError('Please enter the requested correction punch time.');
+      return;
+    }
+    if (!form.reason.trim()) {
+      setFormError('Please provide a detailed explanation for this punch correction.');
+      return;
+    }
 
-    setRequests([newReq, ...requests]);
-    setIsModalOpen(false);
+    setFormSubmitting(true);
+    try {
+      const newReq = await api.createRegularizationRequest({
+        date: form.date.trim(),
+        originalPunch: form.originalPunch.trim(),
+        requestedPunch: form.requestedPunch.trim(),
+        type: form.type,
+        reason: form.reason.trim(),
+      });
+
+      setRequests((prev) => [newReq, ...prev]);
+      setIsModalOpen(false);
+      setForm({
+        date: '16 Nov 2026',
+        originalPunch: 'Check-In: 09:15 AM | Check-Out: --:--',
+        requestedPunch: 'Check-Out: 06:15 PM',
+        type: 'Missed Check-Out',
+        reason: ''
+      });
+    } catch (err: any) {
+      console.error('Create regularization error:', err);
+      setFormError(err.message || 'Failed to submit regularization request. Please retry.');
+    } finally {
+      setFormSubmitting(false);
+    }
   };
+
+  const pendingCount = requests.filter((r) => r.status === 'Pending').length;
+  const approvedCount = requests.filter((r) => r.status === 'Approved').length;
+  const rejectedCount = requests.filter((r) => r.status === 'Rejected').length;
 
   return (
     <div className="space-y-6">
@@ -191,7 +203,7 @@ export const AttendanceRegularization: React.FC = () => {
               Attendance Regularization & Punch Corrections
             </h2>
             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-              user?.role === 'ADMIN' ? 'bg-purple-100 text-[#6338DF]' :
+              user?.role === 'ADMIN' ? 'bg-purple-100 text-[#6534E8]' :
               user?.role === 'HR' ? 'bg-blue-100 text-blue-700' :
               user?.role === 'MANAGER' ? 'bg-amber-100 text-amber-700' :
               'bg-emerald-100 text-emerald-700'
@@ -206,7 +218,7 @@ export const AttendanceRegularization: React.FC = () => {
           </p>
         </div>
 
-        <Button onClick={() => setIsModalOpen(true)} icon={<Plus size={16} />}>
+        <Button onClick={() => { setFormError(null); setIsModalOpen(true); }} icon={<Plus size={16} />}>
           Request Regularization
         </Button>
       </div>
@@ -222,8 +234,21 @@ export const AttendanceRegularization: React.FC = () => {
             onClick={() => setActionError(null)}
             className="text-red-500 hover:text-red-700 font-bold p-1"
           >
-            Ã—
+            ×
           </button>
+        </div>
+      )}
+
+      {/* Fetch Error Notification */}
+      {fetchError && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadRequests}>
+            Retry
+          </Button>
         </div>
       )}
 
@@ -232,9 +257,7 @@ export const AttendanceRegularization: React.FC = () => {
         <Card className="flex items-center justify-between border-l-4 border-amber-400">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase">Pending Review</p>
-            <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">
-              {authorizedRequests.filter((r) => r.status === 'Pending').length}
-            </h3>
+            <h3 className="text-2xl font-extrabold text-[#151936] mt-1">{pendingCount}</h3>
             <p className="text-xs text-amber-600 font-medium mt-0.5">
               {isEmployee ? 'Awaiting manager / HR verification' : 'Requires verification review'}
             </p>
@@ -247,27 +270,21 @@ export const AttendanceRegularization: React.FC = () => {
         <Card className="flex items-center justify-between border-l-4 border-emerald-500">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase">Approved Adjustments</p>
-            <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">
-              {authorizedRequests.filter((r) => r.status === 'Approved').length}
-            </h3>
-            <p className="text-xs text-emerald-600 font-medium mt-0.5">Aligned with attendance records</p>
+            <h3 className="text-2xl font-extrabold text-[#151936] mt-1">{approvedCount}</h3>
+            <p className="text-xs text-emerald-600 font-medium mt-0.5">Punches updated in attendance ledger</p>
           </div>
           <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <CheckCircle2 size={20} />
           </div>
         </Card>
 
-        <Card className="flex items-center justify-between border-l-4 border-[#6338DF]">
+        <Card className="flex items-center justify-between border-l-4 border-red-500">
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase">Total Submissions</p>
-            <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">
-              {authorizedRequests.length}
-            </h3>
-            <p className="text-xs text-purple-600 font-medium mt-0.5">
-              {isEmployee ? 'Submitted this month' : 'Scoped to your authorization'}
-            </p>
+            <p className="text-xs font-semibold text-gray-500 uppercase">Rejected Claims</p>
+            <h3 className="text-2xl font-extrabold text-[#151936] mt-1">{rejectedCount}</h3>
+            <p className="text-xs text-red-600 font-medium mt-0.5">Geofence breach confirmed</p>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-purple-50 text-[#6338DF] flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
             <FileCheck2 size={20} />
           </div>
         </Card>
@@ -279,18 +296,16 @@ export const AttendanceRegularization: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-gray-900 text-sm sm:text-base">
-                {isEmployee ? 'My Regularization History' : isManager ? 'Team Regularization Requests' : 'All Regularization Records'}
+                {isEmployee ? 'My Regularization Requests' : isManager ? 'Team Regularization Requests' : 'All Attendance Regularization Requests'}
               </h3>
               <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full text-gray-600 font-mono">
-                {authorizedRequests.length} records
+                {requests.length} records
               </span>
             </div>
             <p className="text-xs text-gray-500">
               {isEmployee
-                ? 'Only your personal punch correction requests are visible.'
-                : isManager
-                ? 'Showing requests for you and your assigned engineering team members.'
-                : 'All company-wide punch adjustments.'}
+                ? 'Track your submitted punch dispute resolutions.'
+                : 'Review discrepancies and approve manual timestamp adjustments.'}
             </p>
           </div>
         </div>
@@ -301,28 +316,36 @@ export const AttendanceRegularization: React.FC = () => {
               <tr className="bg-gray-50/75 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider">
                 <th className="py-3.5 px-4 sm:px-6">Request ID</th>
                 <th className="py-3.5 px-4 sm:px-6">Employee</th>
-                <th className="py-3.5 px-4 sm:px-6">Date</th>
-                <th className="py-3.5 px-4 sm:px-6">Original vs Requested</th>
-                <th className="py-3.5 px-4 sm:px-6">Correction Type & Reason</th>
+                <th className="py-3.5 px-4 sm:px-6">Incident Date</th>
+                <th className="py-3.5 px-4 sm:px-6">Punch Discrepancy</th>
+                <th className="py-3.5 px-4 sm:px-6">Classification & Reason</th>
                 <th className="py-3.5 px-4 sm:px-6">Status</th>
-                <th className="py-3.5 px-4 sm:px-6 text-right">Actions / Review</th>
+                <th className="py-3.5 px-4 sm:px-6 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {authorizedRequests.length === 0 ? (
+              {loading ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-xs text-gray-400">
-                    No regularization records found within your scope.
+                    <Loader2 size={24} className="animate-spin mx-auto text-[#6534E8] mb-2" />
+                    Loading regularization records...
+                  </td>
+                </tr>
+              ) : requests.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-xs text-gray-400">
+                    No regularization records found.
                   </td>
                 </tr>
               ) : (
-                authorizedRequests.map((r) => {
+                requests.map((r) => {
                   const isOwnRecord = r.empId === user?.id;
                   const canTakeAction = canApprove(r.empId);
+                  const isProcessingThis = processingId === r.id;
 
                   return (
                     <tr key={r.id} className="hover:bg-purple-50/20 transition-colors">
-                      <td className="py-3.5 px-4 sm:px-6 font-mono text-xs font-bold text-[#6338DF]">
+                      <td className="py-3.5 px-4 sm:px-6 font-mono text-xs font-bold text-[#6534E8]">
                         {r.id}
                       </td>
 
@@ -330,12 +353,12 @@ export const AttendanceRegularization: React.FC = () => {
                         <div className="flex items-center gap-1.5">
                           <p className="font-semibold text-gray-900">{r.name}</p>
                           {isOwnRecord && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-[#6338DF]">
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-[#6534E8]">
                               You
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500 font-mono">{r.empId} â€¢ {r.department}</p>
+                        <p className="text-xs text-gray-500 font-mono">{r.empId} • {r.department}</p>
                       </td>
 
                       <td className="py-3.5 px-4 sm:px-6 text-xs text-gray-700 font-medium">
@@ -343,8 +366,22 @@ export const AttendanceRegularization: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 px-4 sm:px-6 text-xs">
-                        <p className="text-gray-400 line-through text-[11px]">{r.originalPunch}</p>
-                        <p className="text-emerald-700 font-semibold">{r.requestedPunch}</p>
+                        <p className="text-gray-400">
+                          {(() => {
+                            const parts = r.originalPunch.split(' | ');
+                            const strikeIn  = r.type === 'Missed Check-In'  || r.type === 'GPS Timeout / Device Glitch' || r.type === 'On-Duty Client Visit';
+                            const strikeOut = r.type === 'Missed Check-Out' || r.type === 'GPS Timeout / Device Glitch' || r.type === 'On-Duty Client Visit';
+                            return (
+                              <>
+                                <span className={strikeIn  ? 'line-through' : ''}>{parts[0]}</span>
+                                {parts[1] !== undefined && (
+                                  <> | <span className={strikeOut ? 'line-through' : ''}>{parts[1]}</span></>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </p>
+                        <p className="font-semibold text-emerald-600 mt-0.5">&rarr; {r.requestedPunch}</p>
                       </td>
 
                       <td className="py-3.5 px-4 sm:px-6 text-xs text-gray-700">
@@ -364,6 +401,12 @@ export const AttendanceRegularization: React.FC = () => {
                         >
                           {r.status}
                         </Badge>
+                        {r.processedBy && (
+                          <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">
+                            {r.status} by {r.processedBy}
+                            {r.processedAt ? <><br />{r.processedAt}</> : null}
+                          </p>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-4 sm:px-6 text-right">
@@ -383,25 +426,31 @@ export const AttendanceRegularization: React.FC = () => {
                             ) : canTakeAction ? (
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
-                                  onClick={() => handleApprove(r.id, r.empId)}
+                                  onClick={() => handleApprove(r.id, r.empId, r.version)}
+                                  disabled={isProcessingThis || !!processingId}
                                   title="Approve Regularization"
-                                  className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                                  className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                  <Check size={15} />
+                                  {isProcessingThis ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
                                 </button>
                                 <button
-                                  onClick={() => handleReject(r.id, r.empId)}
+                                  onClick={() => handleReject(r.id, r.empId, r.version)}
+                                  disabled={isProcessingThis || !!processingId}
                                   title="Reject Regularization"
-                                  className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                                  className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                  <X size={15} />
+                                  {isProcessingThis ? <Loader2 size={15} className="animate-spin" /> : <X size={15} />}
                                 </button>
                               </div>
                             ) : (
                               <span className="text-xs text-gray-400 italic">Not Assigned</span>
                             )
                           ) : (
-                            <span className="text-xs text-gray-400 italic">Audited</span>
+                            <span className={`text-xs font-semibold ${
+                              r.status === 'Approved' ? 'text-emerald-700' : 'text-red-700'
+                            }`}>
+                              {r.status}
+                            </span>
                           )
                         )}
                       </td>
@@ -417,25 +466,42 @@ export const AttendanceRegularization: React.FC = () => {
       {/* 4. Request Regularization Modal */}
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => { if (!formSubmitting) setIsModalOpen(false); }}
         title="Submit Attendance Correction Request"
         subtitle={`Correction entry for ${user?.name} (${user?.id})`}
         badge="Self-Service Portal"
         footer={
           <>
-            <Button variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={formSubmitting}
+              onClick={() => setIsModalOpen(false)}
+            >
               Cancel
             </Button>
-            <Button size="sm" onClick={handleSaveRequest}>
-              Submit for Verification
+            <Button
+              size="sm"
+              disabled={formSubmitting}
+              onClick={handleSaveRequest}
+              icon={formSubmitting ? <Loader2 size={14} className="animate-spin" /> : undefined}
+            >
+              {formSubmitting ? 'Submitting...' : 'Submit for Verification'}
             </Button>
           </>
         }
       >
         <form onSubmit={handleSaveRequest} className="space-y-3.5">
+          {formError && (
+            <div className="p-3 bg-red-50 rounded-xl border border-red-200 text-xs text-red-700 font-semibold flex items-center gap-2">
+              <ShieldAlert size={15} className="shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
+
           <div className="p-3 bg-purple-50/50 rounded-xl border border-purple-100 flex items-center justify-between text-xs">
             <span className="text-gray-600 font-medium">Employee Identity:</span>
-            <span className="font-bold text-gray-900">{user?.name} ({user?.id}) â€¢ {user?.department}</span>
+            <span className="font-bold text-gray-900">{user?.name} ({user?.id}) • {user?.department}</span>
           </div>
 
           <Input
@@ -443,6 +509,7 @@ export const AttendanceRegularization: React.FC = () => {
             placeholder="e.g. 16 Nov 2026"
             value={form.date}
             onChange={(e) => setForm({ ...form, date: e.target.value })}
+            disabled={formSubmitting}
             required
           />
 
@@ -451,7 +518,8 @@ export const AttendanceRegularization: React.FC = () => {
             <select
               value={form.type}
               onChange={(e) => setForm({ ...form, type: e.target.value as RegularizationRequest['type'] })}
-              className="w-full py-2.5 px-3 bg-gray-50/50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#6338DF]"
+              disabled={formSubmitting}
+              className="w-full py-2.5 px-3 bg-gray-50/50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#6534E8]"
             >
               <option value="Missed Check-Out">Missed Check-Out Punch</option>
               <option value="Missed Check-In">Missed Check-In Punch</option>
@@ -465,6 +533,7 @@ export const AttendanceRegularization: React.FC = () => {
               label="Original Punch Record"
               value={form.originalPunch}
               onChange={(e) => setForm({ ...form, originalPunch: e.target.value })}
+              disabled={formSubmitting}
               required
             />
             <Input
@@ -472,6 +541,7 @@ export const AttendanceRegularization: React.FC = () => {
               placeholder="e.g. Check-Out: 06:20 PM"
               value={form.requestedPunch}
               onChange={(e) => setForm({ ...form, requestedPunch: e.target.value })}
+              disabled={formSubmitting}
               required
             />
           </div>
@@ -481,6 +551,7 @@ export const AttendanceRegularization: React.FC = () => {
             placeholder="Explain why the punch was missed or discrepancy occurred"
             value={form.reason}
             onChange={(e) => setForm({ ...form, reason: e.target.value })}
+            disabled={formSubmitting}
             required
           />
         </form>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   MapPin,
   Clock,
@@ -8,10 +8,15 @@ import {
   Filter,
   Search,
   Download,
-  Navigation
+  Navigation,
+  Loader2,
+  AlertTriangle,
+  CalendarCheck
 } from 'lucide-react';
 import { Card, Badge, Button, Input } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
+import { useRefresh } from '../context/RefreshContext';
+import * as api from '../services/api';
 
 interface AttendanceLog {
   id: string;
@@ -19,182 +24,109 @@ interface AttendanceLog {
   name: string;
   department: string;
   branch: string;
+  date?: string;
   checkIn: string;
   checkOut: string;
   workHours: string;
-  locationStatus: 'Inside Geofence' | 'Hybrid Approved' | 'Geofence Breach';
+  locationStatus: 'Inside Geofence' | 'Hybrid Approved' | 'Geofence Breach' | 'Approved Leave';
   status: 'Present' | 'Late' | 'Absent' | 'On Leave';
   distanceMeters: number;
 }
 
-const mockAttendanceLogs: AttendanceLog[] = [
-  {
-    id: 'ATT-001',
-    empId: 'EMP-001',
-    name: 'Jagadeesh K',
-    department: 'Engineering',
-    branch: 'BLR-HQ',
-    checkIn: '09:15 AM',
-    checkOut: '06:20 PM',
-    workHours: '09h 05m',
-    locationStatus: 'Inside Geofence',
-    status: 'Present',
-    distanceMeters: 24
-  },
-  {
-    id: 'ATT-002',
-    empId: 'EMP-002',
-    name: 'Imran M',
-    department: 'Engineering',
-    branch: 'BLR-HQ',
-    checkIn: '09:10 AM',
-    checkOut: '--:--',
-    workHours: '06h 45m (In Progress)',
-    locationStatus: 'Inside Geofence',
-    status: 'Present',
-    distanceMeters: 12
-  },
-  {
-    id: 'ATT-003',
-    empId: 'EMP-003',
-    name: 'Karthick R',
-    department: 'Mobile Apps',
-    branch: 'MAA-01',
-    checkIn: '09:20 AM',
-    checkOut: '--:--',
-    workHours: '06h 35m (In Progress)',
-    locationStatus: 'Inside Geofence',
-    status: 'Present',
-    distanceMeters: 45
-  },
-  {
-    id: 'ATT-004',
-    empId: 'EMP-004',
-    name: 'Ayesha N',
-    department: 'Backend',
-    branch: 'BLR-HQ',
-    checkIn: '09:48 AM',
-    checkOut: '--:--',
-    workHours: '06h 07m (In Progress)',
-    locationStatus: 'Inside Geofence',
-    status: 'Late',
-    distanceMeters: 68
-  },
-  {
-    id: 'ATT-005',
-    empId: 'EMP-005',
-    name: 'Arun Kumar',
-    department: 'Human Resources',
-    branch: 'BLR-HQ',
-    checkIn: '--:--',
-    checkOut: '--:--',
-    workHours: '00h 00m',
-    locationStatus: 'Hybrid Approved',
-    status: 'On Leave',
-    distanceMeters: 0
-  },
-  {
-    id: 'ATT-006',
-    empId: 'EMP-006',
-    name: 'Priya S',
-    department: 'Quality Assurance',
-    branch: 'HYD-01',
-    checkIn: '09:25 AM',
-    checkOut: '--:--',
-    workHours: '06h 30m (In Progress)',
-    locationStatus: 'Hybrid Approved',
-    status: 'Present',
-    distanceMeters: 0
-  },
-  {
-    id: 'ATT-007',
-    empId: 'EMP-007',
-    name: 'Rahul M',
-    department: 'DevOps & Cloud',
-    branch: 'BLR-HQ',
-    checkIn: '09:55 AM',
-    checkOut: '--:--',
-    workHours: '06h 00m (In Progress)',
-    locationStatus: 'Inside Geofence',
-    status: 'Late',
-    distanceMeters: 82
-  },
-  {
-    id: 'ATT-008',
-    empId: 'EMP-008',
-    name: 'Trupthi V',
-    department: 'Database',
-    branch: 'MAA-01',
-    checkIn: '09:12 AM',
-    checkOut: '--:--',
-    workHours: '06h 43m (In Progress)',
-    locationStatus: 'Inside Geofence',
-    status: 'Present',
-    distanceMeters: 18
-  },
-  {
-    id: 'ATT-010',
-    empId: 'EMP-010',
-    name: 'Amrutha K',
-    department: 'Quality Assurance',
-    branch: 'BLR-HQ',
-    checkIn: '09:18 AM',
-    checkOut: '--:--',
-    workHours: '06h 37m (In Progress)',
-    locationStatus: 'Inside Geofence',
-    status: 'Present',
-    distanceMeters: 15
-  }
-];
-
 export const AttendanceManagement: React.FC = () => {
   const { user } = useAuth();
+  const { registerRefreshHandler } = useRefresh();
+
+  const [logs, setLogs] = useState<AttendanceLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [branchFilter, setBranchFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
 
-  // Self-service GPS punch simulation state
-  const [punchStatus, setPunchStatus] = useState<{ checkedIn: boolean; time: string; distance: number }>({
-    checkedIn: true,
-    time: '09:02 AM',
-    distance: 14
-  });
-  const [punchFeedback, setPunchFeedback] = useState<string | null>(null);
+  // GPS Punch State
+  const [punchLoading, setPunchLoading] = useState(false);
+  const [punchFeedback, setPunchFeedback] = useState<{ text: string; isError?: boolean } | null>(null);
 
   const isEmployee = user?.role === 'EMPLOYEE';
   const isManager = user?.role === 'MANAGER';
   const isAdminOrHr = user?.role === 'ADMIN' || user?.role === 'HR';
 
-  // Handle GPS check-in/out for the employee themselves
-  const handleTogglePunch = () => {
-    if (punchStatus.checkedIn) {
-      setPunchStatus({ checkedIn: false, time: '06:15 PM', distance: 18 });
-      setPunchFeedback(`GPS Check-Out logged successfully at 06:15 PM (18m from BLR-HQ geofence center).`);
-    } else {
-      setPunchStatus({ checkedIn: true, time: '09:05 AM', distance: 22 });
-      setPunchFeedback(`GPS Check-In logged successfully at 09:05 AM (22m within BLR-HQ geofence radius).`);
+  // Load attendance logs from backend
+  const loadLogs = useCallback(async () => {
+    try {
+      setFetchError(null);
+      const data = await api.getAttendanceLogs();
+      setLogs(data);
+    } catch (err: any) {
+      console.error('Failed to load attendance logs:', err);
+      setFetchError(err.message || 'Unable to retrieve attendance records.');
+    } finally {
+      setLoading(false);
     }
-    setTimeout(() => setPunchFeedback(null), 4000);
+  }, []);
+
+  useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
+
+  // Hook into global RefreshContext
+  useEffect(() => {
+    return registerRefreshHandler(async () => {
+      await loadLogs();
+    });
+  }, [registerRefreshHandler, loadLogs]);
+
+  // Current user's punch status derived from backend log
+  const myLog = useMemo(() => {
+    return logs.find((l) => l.empId === user?.id);
+  }, [logs, user?.id]);
+
+  const isCheckedIn = useMemo(() => {
+    if (!myLog) return false;
+    return myLog.checkIn !== '--:--' && myLog.checkOut === '--:--';
+  }, [myLog]);
+
+  // Handle GPS check-in/out for the employee themselves
+  const handleTogglePunch = async () => {
+    if (punchLoading) return;
+    setPunchLoading(true);
+    setPunchFeedback(null);
+
+    const action = isCheckedIn ? 'out' : 'in';
+    const distanceMeters = Math.floor(12 + Math.random() * 20); // Simulated GPS coordinate validation
+
+    try {
+      const res = await api.punchAttendance(action, distanceMeters);
+      setPunchFeedback({ text: res.message, isError: false });
+      await loadLogs();
+    } catch (err: any) {
+      console.error('Punch failed:', err);
+      setPunchFeedback({ text: err.message || 'GPS Punch failed. Please retry.', isError: true });
+    } finally {
+      setPunchLoading(false);
+      setTimeout(() => setPunchFeedback(null), 5000);
+    }
   };
 
-  // Restrict records strictly by role and record ownership
-  const authorizedLogs = useMemo(() => {
-    return mockAttendanceLogs.filter((log) => {
-      // 1. Employee: only their own records
-      if (isEmployee) {
-        return log.empId === user?.id;
-      }
-      // 2. Manager: their own records + records of their assigned team members
-      if (isManager) {
-        return log.empId === user?.id || (user?.managedTeam && user.managedTeam.includes(log.empId));
-      }
-      // 3. Admin & HR: all records
-      return true;
-    });
-  }, [isEmployee, isManager, user]);
+  // Export filtered logs to real CSV
+  const handleExportCSV = () => {
+    if (filteredLogs.length === 0) {
+      alert('No attendance records available to export.');
+      return;
+    }
+
+    const header = 'ID,Employee ID,Name,Department,Branch,Date,Check-In,Check-Out,Hours,Geofence Status,Distance (m),Status\n';
+    const rows = filteredLogs.map((l) =>
+      `"${l.id}","${l.empId}","${l.name}","${l.department}","${l.branch}","${l.date || '16 Nov 2026'}","${l.checkIn}","${l.checkOut}","${l.workHours}","${l.locationStatus}",${l.distanceMeters},"${l.status}"`
+    ).join('\n');
+
+    api.downloadCSV(`Attendance_Logs_${new Date().toISOString().split('T')[0]}.csv`, header + rows);
+  };
 
   const filteredLogs = useMemo(() => {
-    return authorizedLogs.filter((log) => {
+    return logs.filter((log) => {
       const matchSearch =
         log.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         log.empId.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -203,7 +135,7 @@ export const AttendanceManagement: React.FC = () => {
       const matchStatus = statusFilter === 'All' || log.status === statusFilter;
       return matchSearch && matchBranch && matchStatus;
     });
-  }, [authorizedLogs, searchTerm, branchFilter, statusFilter]);
+  }, [logs, searchTerm, branchFilter, statusFilter]);
 
   return (
     <div className="space-y-6">
@@ -215,7 +147,7 @@ export const AttendanceManagement: React.FC = () => {
               {isEmployee ? 'My GPS Attendance & Punches' : 'Attendance Dashboard & Geofence Logs'}
             </h2>
             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-              user?.role === 'ADMIN' ? 'bg-purple-100 text-[#6338DF]' :
+              user?.role === 'ADMIN' ? 'bg-purple-100 text-[#6534E8]' :
               user?.role === 'HR' ? 'bg-blue-100 text-blue-700' :
               user?.role === 'MANAGER' ? 'bg-amber-100 text-amber-700' :
               'bg-emerald-100 text-emerald-700'
@@ -236,22 +168,35 @@ export const AttendanceManagement: React.FC = () => {
               variant="outline"
               size="sm"
               icon={<Download size={15} />}
-              onClick={() => alert('Exporting attendance records to CSV...')}
+              onClick={handleExportCSV}
             >
-              Export Logs
+              Export Logs CSV
             </Button>
           </div>
         )}
       </div>
 
-      {/* Self-service GPS Punch Widget for Employees & Managers */}
+      {/* Fetch Error Banner */}
+      {fetchError && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadLogs}>
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {/* Self-service GPS Punch Widget */}
       <Card className="bg-gradient-to-r from-purple-50/50 to-indigo-50/50 border border-purple-100">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
-              punchStatus.checkedIn ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
+              isCheckedIn ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
             }`}>
-              <Navigation size={22} className={punchStatus.checkedIn ? 'animate-pulse' : ''} />
+              <Navigation size={22} className={isCheckedIn ? 'animate-pulse' : ''} />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -263,24 +208,35 @@ export const AttendanceManagement: React.FC = () => {
                 </span>
               </div>
               <p className="text-xs text-gray-600 mt-0.5">
-                Current status: <span className="font-semibold text-gray-900">{punchStatus.checkedIn ? 'Checked In' : 'Checked Out'}</span> at {punchStatus.time} ({punchStatus.distance}m from office center)
+                Current status: <span className="font-semibold text-gray-900">
+                  {isCheckedIn ? 'Checked In' : 'Checked Out'}
+                </span> {myLog ? `at ${isCheckedIn ? myLog.checkIn : myLog.checkOut} (${myLog.distanceMeters}m from office center)` : 'at BLR-HQ'}
               </p>
             </div>
           </div>
 
           <Button
-            variant={punchStatus.checkedIn ? 'outline' : 'primary'}
+            variant={isCheckedIn ? 'outline' : 'primary'}
             onClick={handleTogglePunch}
-            icon={punchStatus.checkedIn ? <Clock size={16} /> : <CheckCircle2 size={16} />}
+            disabled={punchLoading}
+            icon={punchLoading ? <Loader2 size={16} className="animate-spin" /> : isCheckedIn ? <Clock size={16} /> : <CheckCircle2 size={16} />}
           >
-            {punchStatus.checkedIn ? 'Punch Check-Out' : 'Punch Check-In'}
+            {punchLoading ? 'Recording...' : isCheckedIn ? 'Punch Check-Out' : 'Punch Check-In'}
           </Button>
         </div>
 
         {punchFeedback && (
-          <div className="mt-3 p-2.5 rounded-xl bg-emerald-100/70 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
-            <CheckCircle2 size={15} className="text-emerald-700" />
-            <span>{punchFeedback}</span>
+          <div className={`mt-3 p-2.5 rounded-xl border text-xs font-semibold flex items-center gap-2 animate-in fade-in ${
+            punchFeedback.isError
+              ? 'bg-red-50 border-red-200 text-red-800'
+              : 'bg-emerald-100/70 border-emerald-200 text-emerald-900'
+          }`}>
+            {punchFeedback.isError ? (
+              <XCircle size={15} className="text-red-600" />
+            ) : (
+              <CheckCircle2 size={15} className="text-emerald-700" />
+            )}
+            <span>{punchFeedback.text}</span>
           </div>
         )}
       </Card>
@@ -291,8 +247,8 @@ export const AttendanceManagement: React.FC = () => {
           <Card className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase">Present On-Site</p>
-              <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">
-                {isManager ? authorizedLogs.filter((l) => l.status === 'Present').length : 134}
+              <h3 className="text-2xl font-extrabold text-[#151936] mt-1">
+                {logs.filter((l) => l.status === 'Present').length}
               </h3>
               <p className="text-xs text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
                 <CheckCircle2 size={13} /> Verified in 100m radius
@@ -306,14 +262,14 @@ export const AttendanceManagement: React.FC = () => {
           <Card className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase">Hybrid Approved</p>
-              <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">
-                {isManager ? authorizedLogs.filter((l) => l.locationStatus === 'Hybrid Approved').length : 12}
+              <h3 className="text-2xl font-extrabold text-[#151936] mt-1">
+                {logs.filter((l) => l.locationStatus === 'Hybrid Approved').length}
               </h3>
               <p className="text-xs text-purple-600 font-medium mt-0.5 flex items-center gap-1">
                 <Laptop size={13} /> Authorized remote
               </p>
             </div>
-            <div className="w-11 h-11 rounded-xl bg-purple-50 text-[#6338DF] flex items-center justify-center">
+            <div className="w-11 h-11 rounded-xl bg-purple-50 text-[#6534E8] flex items-center justify-center">
               <Laptop size={20} />
             </div>
           </Card>
@@ -321,11 +277,11 @@ export const AttendanceManagement: React.FC = () => {
           <Card className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase">Late Arrivals</p>
-              <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">
-                {isManager ? authorizedLogs.filter((l) => l.status === 'Late').length : 4}
+              <h3 className="text-2xl font-extrabold text-[#151936] mt-1">
+                {logs.filter((l) => l.status === 'Late').length}
               </h3>
               <p className="text-xs text-amber-600 font-medium mt-0.5 flex items-center gap-1">
-                <Clock size={13} /> After 09:30 AM cutoff
+                <Clock size={13} /> Shift start + grace period
               </p>
             </div>
             <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -336,9 +292,13 @@ export const AttendanceManagement: React.FC = () => {
           <Card className="flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase">Geofence Compliance</p>
-              <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">98.4%</h3>
+              <h3 className="text-2xl font-extrabold text-[#151936] mt-1">
+                {logs.length > 0
+                  ? `${Math.round(((logs.length - logs.filter((l) => l.locationStatus === 'Geofence Breach').length) / logs.length) * 100)}%`
+                  : '100%'}
+              </h3>
               <p className="text-xs text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
-                <CheckCircle2 size={13} /> 0 unapproved breaches
+                <CheckCircle2 size={13} /> Verified coordinates
               </p>
             </div>
             <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -423,7 +383,14 @@ export const AttendanceManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredLogs.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-xs text-gray-400">
+                    <Loader2 size={24} className="animate-spin mx-auto text-[#6534E8] mb-2" />
+                    Loading verified GPS attendance logs...
+                  </td>
+                </tr>
+              ) : filteredLogs.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-xs text-gray-400">
                     No attendance logs found matching the filter criteria.
@@ -439,12 +406,12 @@ export const AttendanceManagement: React.FC = () => {
                         <div className="flex items-center gap-1.5">
                           <p className="font-semibold text-gray-900">{log.name}</p>
                           {isOwnRecord && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-[#6338DF]">
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-[#6534E8]">
                               You
                             </span>
                           )}
                         </div>
-                        <p className="text-xs font-mono text-[#6338DF]">{log.empId} â€¢ {log.department}</p>
+                        <p className="text-xs font-mono text-[#6534E8]">{log.empId} • {log.department}</p>
                       </td>
 
                       <td className="py-3.5 px-4 sm:px-6 font-medium text-gray-700">
@@ -469,16 +436,20 @@ export const AttendanceManagement: React.FC = () => {
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : log.locationStatus === 'Hybrid Approved'
                             ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                            : log.locationStatus === 'Approved Leave'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
                             : 'bg-red-50 text-red-700 border border-red-200'
                         }`}>
                           {log.locationStatus === 'Inside Geofence' ? (
                             <CheckCircle2 size={12} />
                           ) : log.locationStatus === 'Hybrid Approved' ? (
                             <Laptop size={12} />
+                          ) : log.locationStatus === 'Approved Leave' ? (
+                            <CalendarCheck size={12} />
                           ) : (
                             <XCircle size={12} />
                           )}
-                          {log.locationStatus} ({log.distanceMeters}m)
+                          {log.locationStatus}{log.locationStatus === 'Inside Geofence' || log.locationStatus === 'Geofence Breach' ? ` (${log.distanceMeters}m)` : ''}
                         </span>
                       </td>
 

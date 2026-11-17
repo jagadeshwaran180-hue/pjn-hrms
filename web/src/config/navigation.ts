@@ -52,7 +52,6 @@ export const navigationConfig: NavItemConfig[] = [
     name: 'Hybrid Approvals',
     to: '/hybrid-approvals',
     icon: Laptop,
-    badge: 'Approvals',
     roles: ['ADMIN', 'HR', 'MANAGER'],
   },
   {
