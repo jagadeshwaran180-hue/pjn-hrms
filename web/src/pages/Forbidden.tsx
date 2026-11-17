@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ShieldAlert, LayoutDashboard, Lock, UserCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -14,16 +14,16 @@ export const Forbidden: React.FC = () => {
   const requiredRoles = state?.requiredRoles;
 
   return (
-    <div className="min-h-screen bg-[#F7F7FC] flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-[#F6F5FC] flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8">
       {/* Brand Header */}
       <div className="w-full max-w-lg text-center mb-6">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#6338DF] text-white shadow-lg shadow-purple-500/20 mb-3">
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#6534E8] text-white shadow-lg shadow-purple-500/20 mb-3">
           <span className="font-bold text-2xl tracking-tight">P</span>
         </div>
-        <h1 className="text-xl sm:text-2xl font-extrabold text-[#161A3D] tracking-tight">
+        <h1 className="text-xl sm:text-2xl font-extrabold text-[#151936] tracking-tight">
           PJN Tech HRMS
         </h1>
-        <p className="text-xs font-semibold text-[#6338DF] uppercase tracking-wider mt-0.5">
+        <p className="text-xs font-semibold text-[#6534E8] uppercase tracking-wider mt-0.5">
           Access Authorization Gateway
         </p>
       </div>
@@ -36,7 +36,7 @@ export const Forbidden: React.FC = () => {
         </div>
 
         <div className="inline-block px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 tracking-wide uppercase mb-3">
-          Error 403 â€¢ HTTP Forbidden
+          Error 403 • HTTP Forbidden
         </div>
 
         <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">
@@ -61,7 +61,7 @@ export const Forbidden: React.FC = () => {
             <div className="flex items-center justify-between text-xs pb-2 border-b border-gray-200">
               <span className="text-gray-500 font-medium">Assigned Role:</span>
               <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                user.role === 'ADMIN' ? 'bg-purple-100 text-[#6338DF]' :
+                user.role === 'ADMIN' ? 'bg-purple-100 text-[#6534E8]' :
                 user.role === 'HR' ? 'bg-blue-100 text-blue-700' :
                 user.role === 'MANAGER' ? 'bg-amber-100 text-amber-700' :
                 'bg-emerald-100 text-emerald-700'

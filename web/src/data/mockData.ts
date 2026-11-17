@@ -22,8 +22,8 @@ export const mockKpis = [
   {
     id: 'on_leave',
     title: 'On Leave',
-    value: 8,
-    subtitle: 'Approved leaves',
+    value: 1, // Only Priya S has approved leave covering 17 Nov
+    subtitle: 'Approved leave',
     iconName: 'UserX',
     accentColor: '#F59E0B',
     bgColor: '#FFFBEB'

@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Construction, ArrowLeft, ShieldCheck, Clock } from 'lucide-react';
 
@@ -15,7 +15,7 @@ export const ComingSoon: React.FC = () => {
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 sm:p-12 text-center max-w-2xl mx-auto my-8">
-      <div className="w-16 h-16 rounded-2xl bg-purple-50 text-[#6338DF] flex items-center justify-center mx-auto mb-4 border border-purple-100">
+      <div className="w-16 h-16 rounded-2xl bg-purple-50 text-[#6534E8] flex items-center justify-center mx-auto mb-4 border border-purple-100">
         <Construction size={32} />
       </div>
 
@@ -33,7 +33,7 @@ export const ComingSoon: React.FC = () => {
 
       <div className="mt-6 p-4 rounded-xl bg-gray-50 text-left border border-gray-100 text-xs text-gray-600 space-y-2">
         <p className="font-semibold text-gray-800 flex items-center gap-1.5">
-          <ShieldCheck size={14} className="text-[#6338DF]" />
+          <ShieldCheck size={14} className="text-[#6534E8]" />
           Upcoming Integration Schedule:
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-500 pl-1">
@@ -48,7 +48,7 @@ export const ComingSoon: React.FC = () => {
       <div className="mt-8">
         <button
           onClick={() => navigate('/dashboard')}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#6338DF] hover:bg-[#5229cb] text-white font-semibold text-xs transition-colors shadow-sm"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#6534E8] hover:bg-[#5425d0] text-white font-semibold text-xs transition-colors shadow-sm"
         >
           <ArrowLeft size={14} />
           <span>Return to Dashboard</span>

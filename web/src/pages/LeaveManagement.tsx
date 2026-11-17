@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   CalendarCheck,
   Plus,
@@ -8,10 +8,14 @@ import {
   Check,
   X,
   ShieldAlert,
-  Lock
+  Lock,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { Card, Badge, Button, Input, Modal } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
+import { useRefresh } from '../context/RefreshContext';
+import * as api from '../services/api';
 
 interface LeaveRecord {
   id: string;
@@ -25,96 +29,27 @@ interface LeaveRecord {
   reason: string;
   status: 'Pending' | 'Approved' | 'Rejected';
   appliedOn: string;
+  processedBy?: string;
+  processedAt?: string;
+  rejectionReason?: string;
+  version: number;
 }
-
-const initialLeaves: LeaveRecord[] = [
-  {
-    id: 'LR-101',
-    empId: 'EMP-005',
-    name: 'Arun Kumar',
-    department: 'Human Resources',
-    leaveType: 'Annual Leave',
-    startDate: '18 Nov 2026',
-    endDate: '20 Nov 2026',
-    days: 3,
-    reason: 'Family wedding event in native town',
-    status: 'Pending',
-    appliedOn: '15 Nov 2026'
-  },
-  {
-    id: 'LR-102',
-    empId: 'EMP-006',
-    name: 'Priya S',
-    department: 'Quality Assurance',
-    leaveType: 'Sick Leave',
-    startDate: '16 Nov 2026',
-    endDate: '17 Nov 2026',
-    days: 2,
-    reason: 'Viral fever, resting under prescription',
-    status: 'Approved',
-    appliedOn: '15 Nov 2026'
-  },
-  {
-    id: 'LR-103',
-    empId: 'EMP-007',
-    name: 'Rahul M',
-    department: 'DevOps & Cloud',
-    leaveType: 'Casual Leave',
-    startDate: '21 Nov 2026',
-    endDate: '21 Nov 2026',
-    days: 1,
-    reason: 'Personal bank and paperwork appointment',
-    status: 'Pending',
-    appliedOn: '16 Nov 2026'
-  },
-  {
-    id: 'LR-104',
-    empId: 'EMP-003',
-    name: 'Karthick R',
-    department: 'Mobile Apps',
-    leaveType: 'Annual Leave',
-    startDate: '01 Dec 2026',
-    endDate: '05 Dec 2026',
-    days: 5,
-    reason: 'Year-end planned vacation',
-    status: 'Approved',
-    appliedOn: '10 Nov 2026'
-  },
-  {
-    id: 'LR-105',
-    empId: 'EMP-001',
-    name: 'Jagadeesh K',
-    department: 'Engineering',
-    leaveType: 'Annual Leave',
-    startDate: '24 Nov 2026',
-    endDate: '25 Nov 2026',
-    days: 2,
-    reason: 'Personal family occasion',
-    status: 'Pending',
-    appliedOn: '16 Nov 2026'
-  },
-  {
-    id: 'LR-106',
-    empId: 'EMP-002',
-    name: 'Imran M',
-    department: 'Engineering',
-    leaveType: 'Casual Leave',
-    startDate: '28 Nov 2026',
-    endDate: '28 Nov 2026',
-    days: 1,
-    reason: 'Personal errands and bank consultation',
-    status: 'Pending',
-    appliedOn: '16 Nov 2026'
-  }
-];
 
 export const LeaveManagement: React.FC = () => {
   const { user, canApprove } = useAuth();
-  const [leaves, setLeaves] = useState<LeaveRecord[]>(initialLeaves);
+  const { registerRefreshHandler } = useRefresh();
+
+  const [leaves, setLeaves] = useState<LeaveRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [filterType, setFilterType] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const isEmployee = user?.role === 'EMPLOYEE';
   const isManager = user?.role === 'MANAGER';
@@ -128,23 +63,34 @@ export const LeaveManagement: React.FC = () => {
     reason: ''
   });
 
-  // Filter leaves according to authenticated identity & role
-  const authorizedLeaves = useMemo(() => {
-    return leaves.filter((l) => {
-      // 1. Employee: only their own requests
-      if (isEmployee) {
-        return l.empId === user?.id;
-      }
-      // 2. Manager: their own requests + requests of their assigned team members
-      if (isManager) {
-        return l.empId === user?.id || (user?.managedTeam && user.managedTeam.includes(l.empId));
-      }
-      // 3. Admin / HR: all requests
-      return true;
-    });
-  }, [leaves, isEmployee, isManager, user]);
+  // Fetch leaves from persistent backend database
+  const loadLeaves = useCallback(async () => {
+    try {
+      setFetchError(null);
+      const data = await api.getLeaves();
+      setLeaves(data);
+    } catch (err: any) {
+      console.error('Failed to load leaves:', err);
+      setFetchError(err.message || 'Unable to load leave applications.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const handleApprove = (id: string, recordOwnerId: string) => {
+  useEffect(() => {
+    loadLeaves();
+  }, [loadLeaves]);
+
+  // Hook into global Refresh (desktop button & pull-to-refresh)
+  useEffect(() => {
+    return registerRefreshHandler(async () => {
+      await loadLeaves();
+    });
+  }, [registerRefreshHandler, loadLeaves]);
+
+  // Handle Approve with backend persistence & concurrency checks
+  const handleApprove = async (id: string, recordOwnerId: string, version: number) => {
+    if (processingId) return; // Prevent repeated clicks
     setActionError(null);
 
     // Enforce approval policy check
@@ -157,10 +103,26 @@ export const LeaveManagement: React.FC = () => {
       return;
     }
 
-    setLeaves(leaves.map((l) => (l.id === id ? { ...l, status: 'Approved' } : l)));
+    setProcessingId(id);
+    try {
+      const updated = await api.decideLeave(id, 'Approved', undefined, version);
+      // Immediately replace action buttons with Approved badge
+      setLeaves((prev) => prev.map((l) => (l.id === id ? { ...l, ...updated, status: 'Approved' } : l)));
+    } catch (err: any) {
+      console.error('Approval failed:', err);
+      setActionError(err.message || 'Approval decision could not be saved. Please retry.');
+      if (err.latest) {
+        // Concurrency conflict: update UI to reflect latest state from server
+        setLeaves((prev) => prev.map((l) => (l.id === id ? { ...l, ...err.latest } : l)));
+      }
+    } finally {
+      setProcessingId(null);
+    }
   };
 
-  const handleReject = (id: string, recordOwnerId: string) => {
+  // Handle Reject with backend persistence & concurrency checks
+  const handleReject = async (id: string, recordOwnerId: string, version: number) => {
+    if (processingId) return; // Prevent repeated clicks
     setActionError(null);
 
     if (!canApprove(recordOwnerId)) {
@@ -172,36 +134,82 @@ export const LeaveManagement: React.FC = () => {
       return;
     }
 
-    setLeaves(leaves.map((l) => (l.id === id ? { ...l, status: 'Rejected' } : l)));
+    setProcessingId(id);
+    try {
+      const updated = await api.decideLeave(
+        id,
+        'Rejected',
+        'Request declined per departmental operational coverage guidelines',
+        version
+      );
+      setLeaves((prev) => prev.map((l) => (l.id === id ? { ...l, ...updated, status: 'Rejected' } : l)));
+    } catch (err: any) {
+      console.error('Rejection failed:', err);
+      setActionError(err.message || 'Rejection decision could not be saved. Please retry.');
+      if (err.latest) {
+        setLeaves((prev) => prev.map((l) => (l.id === id ? { ...l, ...err.latest } : l)));
+      }
+    } finally {
+      setProcessingId(null);
+    }
   };
 
-  const handleApplySubmit = (e: React.FormEvent) => {
+  // Submit new leave application to backend database
+  const handleApplySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
 
-    // Derive identity securely from authenticated session (never trust form spoofing)
-    const newRecord: LeaveRecord = {
-      id: `LR-${100 + leaves.length + 1}`,
-      empId: user?.id || 'EMP-001',
-      name: user?.name || 'Employee',
-      department: user?.department || 'Engineering',
-      leaveType: applyForm.leaveType,
-      startDate: applyForm.startDate,
-      endDate: applyForm.endDate,
-      days: Number(applyForm.days) || 1,
-      reason: applyForm.reason || 'Personal leave request',
-      status: 'Pending',
-      appliedOn: '17 Nov 2026'
-    };
+    if (!applyForm.startDate.trim()) {
+      setFormError('Please provide a valid start date.');
+      return;
+    }
+    if (!applyForm.endDate.trim()) {
+      setFormError('Please provide a valid end date.');
+      return;
+    }
+    if (!applyForm.reason.trim()) {
+      setFormError('Please provide a reason for the leave application.');
+      return;
+    }
+    if (applyForm.days <= 0) {
+      setFormError('Leave days count must be at least 1 day.');
+      return;
+    }
 
-    setLeaves([newRecord, ...leaves]);
-    setIsApplyModalOpen(false);
+    setFormSubmitting(true);
+    try {
+      const newLeave = await api.createLeave({
+        leaveType: applyForm.leaveType,
+        startDate: applyForm.startDate.trim(),
+        endDate: applyForm.endDate.trim(),
+        days: Number(applyForm.days) || 1,
+        reason: applyForm.reason.trim(),
+      });
+
+      setLeaves((prev) => [newLeave, ...prev]);
+      setIsApplyModalOpen(false);
+      setApplyForm({
+        leaveType: 'Annual Leave',
+        startDate: '24 Nov 2026',
+        endDate: '25 Nov 2026',
+        days: 2,
+        reason: '',
+      });
+    } catch (err: any) {
+      console.error('Apply leave error:', err);
+      setFormError(err.message || 'Failed to submit leave application. Please retry.');
+    } finally {
+      setFormSubmitting(false);
+    }
   };
 
-  const filteredLeaves = authorizedLeaves.filter((l) => {
-    const matchType = filterType === 'All' || l.leaveType === filterType;
-    const matchStatus = filterStatus === 'All' || l.status === filterStatus;
-    return matchType && matchStatus;
-  });
+  const filteredLeaves = useMemo(() => {
+    return leaves.filter((l) => {
+      const matchType = filterType === 'All' || l.leaveType === filterType;
+      const matchStatus = filterStatus === 'All' || l.status === filterStatus;
+      return matchType && matchStatus;
+    });
+  }, [leaves, filterType, filterStatus]);
 
   return (
     <div className="space-y-6">
@@ -213,7 +221,7 @@ export const LeaveManagement: React.FC = () => {
               Leave Management & Entitlements
             </h2>
             <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-              user?.role === 'ADMIN' ? 'bg-purple-100 text-[#6338DF]' :
+              user?.role === 'ADMIN' ? 'bg-purple-100 text-[#6534E8]' :
               user?.role === 'HR' ? 'bg-blue-100 text-blue-700' :
               user?.role === 'MANAGER' ? 'bg-amber-100 text-amber-700' :
               'bg-emerald-100 text-emerald-700'
@@ -228,7 +236,7 @@ export const LeaveManagement: React.FC = () => {
           </p>
         </div>
 
-        <Button onClick={() => setIsApplyModalOpen(true)} icon={<Plus size={16} />}>
+        <Button onClick={() => { setFormError(null); setIsApplyModalOpen(true); }} icon={<Plus size={16} />}>
           Apply for Leave
         </Button>
       </div>
@@ -244,25 +252,38 @@ export const LeaveManagement: React.FC = () => {
             onClick={() => setActionError(null)}
             className="text-red-500 hover:text-red-700 font-bold p-1"
           >
-            Ã—
+            ×
           </button>
+        </div>
+      )}
+
+      {/* Fetch Error Notification */}
+      {fetchError && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <Button size="sm" variant="outline" onClick={loadLeaves}>
+            Retry
+          </Button>
         </div>
       )}
 
       {/* 2. Quota Balances Row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="flex items-center justify-between border-l-4 border-[#6338DF]">
+        <Card className="flex items-center justify-between border-l-4 border-[#6534E8]">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase">
               {isEmployee ? 'My Annual Leave Quota' : 'Annual Leave Allocation'}
             </p>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-extrabold text-[#161A3D]">14</span>
+              <span className="text-2xl font-extrabold text-[#151936]">14</span>
               <span className="text-xs text-gray-400">/ 18 days left</span>
             </div>
             <p className="text-[11px] text-purple-600 font-medium mt-0.5">Accrues 1.5 days/month</p>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-purple-50 text-[#6338DF] flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl bg-purple-50 text-[#6534E8] flex items-center justify-center">
             <CalendarCheck size={20} />
           </div>
         </Card>
@@ -273,7 +294,7 @@ export const LeaveManagement: React.FC = () => {
               {isEmployee ? 'My Sick Leave Quota' : 'Sick Leave Allocation'}
             </p>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-extrabold text-[#161A3D]">8</span>
+              <span className="text-2xl font-extrabold text-[#151936]">8</span>
               <span className="text-xs text-gray-400">/ 12 days left</span>
             </div>
             <p className="text-[11px] text-emerald-600 font-medium mt-0.5">Medical cert required for &gt;2 days</p>
@@ -289,7 +310,7 @@ export const LeaveManagement: React.FC = () => {
               {isEmployee ? 'My Casual Leave Quota' : 'Casual Leave Allocation'}
             </p>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-extrabold text-[#161A3D]">5</span>
+              <span className="text-2xl font-extrabold text-[#151936]">5</span>
               <span className="text-xs text-gray-400">/ 6 days left</span>
             </div>
             <p className="text-[11px] text-amber-600 font-medium mt-0.5">Short-notice emergency leave</p>
@@ -351,29 +372,37 @@ export const LeaveManagement: React.FC = () => {
             <thead>
               <tr className="bg-gray-50/75 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider">
                 <th className="py-3.5 px-4 sm:px-6">Request ID</th>
-                <th className="py-3.5 px-4 sm:px-6">Employee</th>
+                <th className="py-3.5 px-4 sm:px-6">Applicant</th>
                 <th className="py-3.5 px-4 sm:px-6">Leave Type</th>
-                <th className="py-3.5 px-4 sm:px-6">Duration</th>
-                <th className="py-3.5 px-4 sm:px-6">Reason</th>
+                <th className="py-3.5 px-4 sm:px-6">Requested Window</th>
+                <th className="py-3.5 px-4 sm:px-6">Stated Reason</th>
                 <th className="py-3.5 px-4 sm:px-6">Status</th>
-                <th className="py-3.5 px-4 sm:px-6 text-right">Actions / Review</th>
+                <th className="py-3.5 px-4 sm:px-6 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredLeaves.length === 0 ? (
+              {loading ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-xs text-gray-400">
-                    No leave applications matching the active filters.
+                    <Loader2 size={24} className="animate-spin mx-auto text-[#6534E8] mb-2" />
+                    Loading leave applications from backend database...
+                  </td>
+                </tr>
+              ) : filteredLeaves.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-xs text-gray-400">
+                    No leave requests found matching the current filters.
                   </td>
                 </tr>
               ) : (
                 filteredLeaves.map((l) => {
                   const isOwnRecord = l.empId === user?.id;
                   const canTakeAction = canApprove(l.empId);
+                  const isProcessingThis = processingId === l.id;
 
                   return (
                     <tr key={l.id} className="hover:bg-purple-50/20 transition-colors">
-                      <td className="py-3.5 px-4 sm:px-6 font-mono text-xs font-bold text-[#6338DF]">
+                      <td className="py-3.5 px-4 sm:px-6 font-mono text-xs font-bold text-[#6534E8]">
                         {l.id}
                       </td>
 
@@ -381,28 +410,35 @@ export const LeaveManagement: React.FC = () => {
                         <div className="flex items-center gap-1.5">
                           <p className="font-semibold text-gray-900">{l.name}</p>
                           {isOwnRecord && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-[#6338DF]">
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-[#6534E8]">
                               You
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500 font-mono">{l.empId} â€¢ {l.department}</p>
+                        <p className="text-xs text-gray-500 font-mono">{l.empId} • {l.department}</p>
+                      </td>
+
+                      <td className="py-3.5 px-4 sm:px-6">
+                        <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
+                          {l.leaveType}
+                        </span>
                       </td>
 
                       <td className="py-3.5 px-4 sm:px-6 text-xs text-gray-700">
-                        {l.leaveType}
-                      </td>
-
-                      <td className="py-3.5 px-4 sm:px-6 text-xs text-gray-700">
-                        <span className="flex items-center gap-1 font-medium">
-                          <Calendar size={13} className="text-[#6338DF]" />
-                          {l.startDate} â€” {l.endDate}
+                        <span className="flex items-center gap-1.5 font-medium">
+                          <Calendar size={13} className="text-[#6534E8]" />
+                          {l.startDate} to {l.endDate}
                         </span>
                         <span className="text-[11px] text-gray-400">({l.days} {l.days === 1 ? 'day' : 'days'})</span>
                       </td>
 
                       <td className="py-3.5 px-4 sm:px-6 text-xs text-gray-600 max-w-xs truncate" title={l.reason}>
                         {l.reason}
+                        {l.rejectionReason && (
+                          <p className="text-[10px] text-red-500 font-medium mt-0.5 truncate" title={l.rejectionReason}>
+                            Reason: {l.rejectionReason}
+                          </p>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-4 sm:px-6">
@@ -417,6 +453,9 @@ export const LeaveManagement: React.FC = () => {
                         >
                           {l.status}
                         </Badge>
+                        {l.processedBy && (
+                          <p className="text-[10px] text-gray-400 mt-0.5">By {l.processedBy}</p>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-4 sm:px-6 text-right">
@@ -436,25 +475,31 @@ export const LeaveManagement: React.FC = () => {
                             ) : canTakeAction ? (
                               <div className="flex items-center justify-end gap-1.5">
                                 <button
-                                  onClick={() => handleApprove(l.id, l.empId)}
+                                  onClick={() => handleApprove(l.id, l.empId, l.version)}
+                                  disabled={isProcessingThis || !!processingId}
                                   title="Approve Leave"
-                                  className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                                  className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                  <Check size={15} />
+                                  {isProcessingThis ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
                                 </button>
                                 <button
-                                  onClick={() => handleReject(l.id, l.empId)}
+                                  onClick={() => handleReject(l.id, l.empId, l.version)}
+                                  disabled={isProcessingThis || !!processingId}
                                   title="Reject Leave"
-                                  className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                                  className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                  <X size={15} />
+                                  {isProcessingThis ? <Loader2 size={15} className="animate-spin" /> : <X size={15} />}
                                 </button>
                               </div>
                             ) : (
                               <span className="text-xs text-gray-400 italic">Not Assigned</span>
                             )
                           ) : (
-                            <span className="text-xs text-gray-400 italic">Resolved</span>
+                            <span className={`text-xs font-semibold ${
+                              l.status === 'Approved' ? 'text-emerald-700' : 'text-red-700'
+                            }`}>
+                              {l.status}
+                            </span>
                           )
                         )}
                       </td>
@@ -470,26 +515,43 @@ export const LeaveManagement: React.FC = () => {
       {/* 4. Apply Leave Modal */}
       <Modal
         isOpen={isApplyModalOpen}
-        onClose={() => setIsApplyModalOpen(false)}
+        onClose={() => { if (!formSubmitting) setIsApplyModalOpen(false); }}
         title="Apply for Employee Leave"
         subtitle={`Submitting time-off for ${user?.name} (${user?.id})`}
         badge="Self-Service Portal"
         footer={
           <>
-            <Button variant="outline" size="sm" onClick={() => setIsApplyModalOpen(false)}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={formSubmitting}
+              onClick={() => setIsApplyModalOpen(false)}
+            >
               Cancel
             </Button>
-            <Button size="sm" onClick={handleApplySubmit}>
-              Submit Application
+            <Button
+              size="sm"
+              disabled={formSubmitting}
+              onClick={handleApplySubmit}
+              icon={formSubmitting ? <Loader2 size={14} className="animate-spin" /> : undefined}
+            >
+              {formSubmitting ? 'Submitting...' : 'Submit Application'}
             </Button>
           </>
         }
       >
         <form onSubmit={handleApplySubmit} className="space-y-3.5">
+          {formError && (
+            <div className="p-3 bg-red-50 rounded-xl border border-red-200 text-xs text-red-700 font-semibold flex items-center gap-2">
+              <ShieldAlert size={15} className="shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
+
           {/* Read-only identity indicator */}
           <div className="p-3 bg-purple-50/50 rounded-xl border border-purple-100 flex items-center justify-between text-xs">
             <span className="text-gray-600 font-medium">Applicant Identity:</span>
-            <span className="font-bold text-gray-900">{user?.name} ({user?.id}) â€¢ {user?.department}</span>
+            <span className="font-bold text-gray-900">{user?.name} ({user?.id}) • {user?.department}</span>
           </div>
 
           <div>
@@ -497,7 +559,8 @@ export const LeaveManagement: React.FC = () => {
             <select
               value={applyForm.leaveType}
               onChange={(e) => setApplyForm({ ...applyForm, leaveType: e.target.value as LeaveRecord['leaveType'] })}
-              className="w-full py-2.5 px-3 bg-gray-50/50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#6338DF]"
+              disabled={formSubmitting}
+              className="w-full py-2.5 px-3 bg-gray-50/50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#6534E8]"
             >
               <option value="Annual Leave">Annual Leave (14 days available)</option>
               <option value="Sick Leave">Sick Leave (8 days available)</option>
@@ -511,6 +574,7 @@ export const LeaveManagement: React.FC = () => {
               value={applyForm.startDate}
               onChange={(e) => setApplyForm({ ...applyForm, startDate: e.target.value })}
               placeholder="e.g. 24 Nov 2026"
+              disabled={formSubmitting}
               required
             />
             <Input
@@ -518,6 +582,7 @@ export const LeaveManagement: React.FC = () => {
               value={applyForm.endDate}
               onChange={(e) => setApplyForm({ ...applyForm, endDate: e.target.value })}
               placeholder="e.g. 25 Nov 2026"
+              disabled={formSubmitting}
               required
             />
           </div>
@@ -525,8 +590,10 @@ export const LeaveManagement: React.FC = () => {
           <Input
             label="Total Days Count"
             type="number"
+            min="1"
             value={applyForm.days}
             onChange={(e) => setApplyForm({ ...applyForm, days: Number(e.target.value) })}
+            disabled={formSubmitting}
             required
           />
 
@@ -535,6 +602,7 @@ export const LeaveManagement: React.FC = () => {
             placeholder="Briefly state the reason for absence"
             value={applyForm.reason}
             onChange={(e) => setApplyForm({ ...applyForm, reason: e.target.value })}
+            disabled={formSubmitting}
             required
           />
         </form>

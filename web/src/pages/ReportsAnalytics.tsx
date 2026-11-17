@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import {
   Calendar,
   Filter,
   TrendingUp,
   FileSpreadsheet,
-  FileText
+  FileText,
+  CheckCircle2
 } from 'lucide-react';
 import { Card, Badge, Button } from '../components/ui';
+import * as api from '../services/api';
 
 interface DepartmentAttendance {
   department: string;
@@ -28,6 +30,26 @@ const deptStats: DepartmentAttendance[] = [
 
 export const ReportsAnalytics: React.FC = () => {
   const [selectedRange, setSelectedRange] = useState('This Month (Nov 2026)');
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+
+  const handleExportCSV = () => {
+    const csvHeader = 'Department,Total Staff,Present Rate (%),Late Rate (%),Average Daily Hours,Reporting Interval\n';
+    const csvRows = deptStats
+      .map(
+        (d) =>
+          `"${d.department}",${d.totalStaff},${d.presentRate || 92.3},${d.lateRate},"${d.avgHours}","${selectedRange}"`
+      )
+      .join('\n');
+
+    api.downloadCSV(`PJN_Attendance_Report_${selectedRange.replace(/[\s()]/g, '_')}.csv`, csvHeader + csvRows);
+    setExportNotice('Attendance report CSV generated and downloaded successfully.');
+    setTimeout(() => setExportNotice(null), 4000);
+  };
+
+  const handleExportPDF = () => {
+    // Print-friendly view trigger
+    window.print();
+  };
 
   return (
     <div className="space-y-6">
@@ -47,29 +69,36 @@ export const ReportsAnalytics: React.FC = () => {
             variant="outline"
             size="sm"
             icon={<FileSpreadsheet size={15} />}
-            onClick={() => alert('Downloading Attendance Report CSV...')}
+            onClick={handleExportCSV}
           >
             Export CSV
           </Button>
           <Button
             size="sm"
             icon={<FileText size={15} />}
-            onClick={() => alert('Generating PDF Executive Summary...')}
+            onClick={handleExportPDF}
           >
-            Export PDF
+            Print / Export PDF
           </Button>
         </div>
       </div>
 
+      {exportNotice && (
+        <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2 animate-in fade-in">
+          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+          <span>{exportNotice}</span>
+        </div>
+      )}
+
       {/* 2. Range Filter Bar */}
       <Card padding="sm" className="flex flex-wrap items-center justify-between gap-3 bg-white">
         <div className="flex items-center gap-2">
-          <Calendar size={16} className="text-[#6338DF]" />
+          <Calendar size={16} className="text-[#6534E8]" />
           <span className="text-xs font-semibold text-gray-700">Reporting Interval:</span>
           <select
             value={selectedRange}
             onChange={(e) => setSelectedRange(e.target.value)}
-            className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#6338DF]"
+            className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#6534E8]"
           >
             <option>Today (16 Nov 2026)</option>
             <option>Current Week (16 - 22 Nov 2026)</option>
@@ -89,47 +118,43 @@ export const ReportsAnalytics: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <p className="text-xs font-semibold text-gray-500 uppercase">Average Attendance</p>
-          <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">93.4%</h3>
+          <h3 className="text-2xl font-extrabold text-[#151936] mt-1">93.6%</h3>
           <p className="text-xs text-emerald-600 font-medium mt-1 flex items-center gap-1">
-            <TrendingUp size={13} /> +1.8% vs last month
+            <TrendingUp size={13} /> +1.8% vs last period
           </p>
         </Card>
 
         <Card>
           <p className="text-xs font-semibold text-gray-500 uppercase">On-Time Arrival Rate</p>
-          <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">96.8%</h3>
-          <p className="text-xs text-emerald-600 font-medium mt-1 flex items-center gap-1">
-            <TrendingUp size={13} /> High punctuality index
-          </p>
-        </Card>
-
-        <Card>
-          <p className="text-xs font-semibold text-gray-500 uppercase">Average Daily Hours</p>
-          <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">8h 48m</h3>
+          <h3 className="text-2xl font-extrabold text-[#151936] mt-1">97.8%</h3>
           <p className="text-xs text-purple-600 font-medium mt-1">
-            Target: 8h 30m standard
+            &lt; 15m grace threshold
           </p>
         </Card>
 
         <Card>
           <p className="text-xs font-semibold text-gray-500 uppercase">Geofence Compliance</p>
-          <h3 className="text-2xl font-extrabold text-[#161A3D] mt-1">99.1%</h3>
+          <h3 className="text-2xl font-extrabold text-[#151936] mt-1">98.2%</h3>
           <p className="text-xs text-emerald-600 font-medium mt-1">
-            100m radius check passed
+            0 unapproved breaches
+          </p>
+        </Card>
+
+        <Card>
+          <p className="text-xs font-semibold text-gray-500 uppercase">Avg Daily Workhours</p>
+          <h3 className="text-2xl font-extrabold text-[#151936] mt-1">8h 51m</h3>
+          <p className="text-xs text-gray-400 mt-1">
+            Target: 8h 30m / shift
           </p>
         </Card>
       </div>
 
-      {/* 4. Department Performance Matrix */}
+      {/* 4. Department Breakdown Table */}
       <Card padding="none" className="overflow-hidden">
         <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-gray-900 text-sm sm:text-base">
-              Department Attendance Breakdown
-            </h3>
-            <p className="text-xs text-gray-500">
-              Comparative workforce presence across technical and operational business units
-            </p>
+            <h3 className="font-bold text-gray-900 text-sm sm:text-base">Departmental Turnout & Punctuality</h3>
+            <p className="text-xs text-gray-500">Breakdown aggregated across engineering, backend, QA, and operations</p>
           </div>
           <Badge variant="purple">Interval: {selectedRange}</Badge>
         </div>
@@ -138,50 +163,43 @@ export const ReportsAnalytics: React.FC = () => {
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-gray-50/75 border-b border-gray-200 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                <th className="py-3.5 px-4 sm:px-6">Department</th>
-                <th className="py-3.5 px-4 sm:px-6">Headcount</th>
-                <th className="py-3.5 px-4 sm:px-6">Turnout Rate</th>
-                <th className="py-3.5 px-4 sm:px-6">Late Ratio</th>
-                <th className="py-3.5 px-4 sm:px-6">Avg Daily Work Hours</th>
-                <th className="py-3.5 px-4 sm:px-6 text-right">Performance Pill</th>
+                <th className="py-3.5 px-4 sm:px-6">Department Name</th>
+                <th className="py-3.5 px-4 sm:px-6">Total Personnel</th>
+                <th className="py-3.5 px-4 sm:px-6">Present Rate</th>
+                <th className="py-3.5 px-4 sm:px-6">Late Arrival Rate</th>
+                <th className="py-3.5 px-4 sm:px-6">Average Office Hours</th>
+                <th className="py-3.5 px-4 sm:px-6 text-right">Performance</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {deptStats.map((item) => (
-                <tr key={item.department} className="hover:bg-purple-50/20 transition-colors">
+              {deptStats.map((d) => (
+                <tr key={d.department} className="hover:bg-purple-50/20 transition-colors">
                   <td className="py-3.5 px-4 sm:px-6 font-semibold text-gray-900">
-                    {item.department}
+                    {d.department}
                   </td>
-
-                  <td className="py-3.5 px-4 sm:px-6 text-gray-600 font-medium">
-                    {item.totalStaff} members
+                  <td className="py-3.5 px-4 sm:px-6 text-gray-600">
+                    {d.totalStaff} members
                   </td>
-
                   <td className="py-3.5 px-4 sm:px-6">
                     <div className="flex items-center gap-2">
-                      <div className="w-24 bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div className="w-16 bg-gray-100 rounded-full h-1.5 overflow-hidden">
                         <div
-                          className="bg-[#6338DF] h-full rounded-full"
-                          style={{ width: `${item.presentRate}%` }}
+                          className="bg-emerald-500 h-1.5 rounded-full"
+                          style={{ width: `${d.presentRate || 92}%` }}
                         />
                       </div>
-                      <span className="text-xs font-bold text-gray-700">{item.presentRate}%</span>
+                      <span className="text-xs font-semibold text-gray-800">{d.presentRate || 92.3}%</span>
                     </div>
                   </td>
-
                   <td className="py-3.5 px-4 sm:px-6 text-xs text-gray-600">
-                    <span className={item.lateRate > 3 ? 'text-amber-600 font-semibold' : 'text-gray-600'}>
-                      {item.lateRate}%
-                    </span>
+                    {d.lateRate}%
                   </td>
-
-                  <td className="py-3.5 px-4 sm:px-6 text-xs font-medium text-gray-800">
-                    {item.avgHours}
+                  <td className="py-3.5 px-4 sm:px-6 font-mono text-xs text-gray-700">
+                    {d.avgHours}
                   </td>
-
                   <td className="py-3.5 px-4 sm:px-6 text-right">
-                    <Badge variant={item.presentRate >= 93 ? 'present' : 'pending'}>
-                      {item.presentRate >= 93 ? 'Optimal' : 'Needs Review'}
+                    <Badge variant={(d.presentRate || 92) >= 93 ? 'present' : 'pending'}>
+                      {(d.presentRate || 92) >= 93 ? 'Optimal' : 'Needs Review'}
                     </Badge>
                   </td>
                 </tr>
