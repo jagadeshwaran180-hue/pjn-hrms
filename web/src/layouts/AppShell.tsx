@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { Header } from '../components/Header';
+import { PullToRefresh } from '../components/PullToRefresh';
 
 export const AppShell: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -36,9 +37,11 @@ export const AppShell: React.FC = () => {
           onOpenMobileSidebar={() => setMobileOpen(true)}
           title={getPageTitle(location.pathname)}
         />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-          <Outlet />
-        </main>
+        <PullToRefresh>
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+            <Outlet />
+          </main>
+        </PullToRefresh>
       </div>
     </div>
   );

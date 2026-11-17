@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Menu, Bell, ChevronDown, User, Shield, LogOut } from 'lucide-react';
+import { Menu, Bell, ChevronDown, User, Shield, LogOut, RotateCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useRefresh } from '../context/RefreshContext';
 
 interface HeaderProps {
   onOpenMobileSidebar: () => void;
@@ -12,11 +13,17 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar, title = 'Da
   const [showDropdown, setShowDropdown] = useState(false);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { isRefreshing, refresh, lastRefreshed } = useRefresh();
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
+
+  // Format last refreshed timestamp
+  const formattedTime = lastRefreshed
+    ? lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : null;
 
   // Derive initials for avatar
   const getInitials = (name?: string) => {
@@ -57,8 +64,29 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar, title = 'Da
         </div>
       </div>
 
-      {/* Right: Notification bell & Profile dropdown */}
-      <div className="flex items-center gap-3 sm:gap-4">
+      {/* Right: Refresh button, Notification bell & Profile dropdown */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* Desktop Refresh Button */}
+        <button
+          type="button"
+          onClick={() => refresh()}
+          disabled={isRefreshing}
+          title={`Refresh current page data (Shift+R, or pull down on touch)\nLast updated: ${formattedTime || 'Just now'}`}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-gray-700 hover:text-[#6338DF] hover:bg-purple-50/60 border border-gray-200/80 hover:border-purple-200 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+          aria-label="Refresh data"
+        >
+          <RotateCw
+            size={14}
+            className={`transition-transform duration-500 text-gray-500 hover:text-[#6338DF] ${
+              isRefreshing ? 'animate-spin text-[#6338DF]' : ''
+            }`}
+          />
+          <span className="hidden sm:inline">Refresh</span>
+          <span className="hidden lg:inline text-[10px] text-gray-400 font-normal">
+            (Shift+R)
+          </span>
+        </button>
+
         {/* Role badge pill */}
         <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 border border-gray-200 text-gray-700">
           <span className={`w-2 h-2 rounded-full ${
