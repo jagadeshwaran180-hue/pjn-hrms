@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   CalendarCheck,
   Plus,
@@ -57,11 +57,28 @@ export const LeaveManagement: React.FC = () => {
 
   const [applyForm, setApplyForm] = useState({
     leaveType: 'Annual Leave' as LeaveRecord['leaveType'],
-    startDate: '24 Nov 2026',
-    endDate: '25 Nov 2026',
-    days: 2,
+    startDate: '',
+    endDate: '',
+    days: 1,
     reason: ''
   });
+
+  const handleDateChange = (field: 'startDate' | 'endDate', value: string) => {
+    const updated = { ...applyForm, [field]: value };
+    const s = new Date(updated.startDate);
+    const e = new Date(updated.endDate);
+    if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && s <= e) {
+      let count = 0;
+      const cur = new Date(s);
+      while (cur <= e) {
+        const day = cur.getDay();
+        if (day !== 0 && day !== 6) count++;
+        cur.setDate(cur.getDate() + 1);
+      }
+      updated.days = Math.max(1, count);
+    }
+    setApplyForm(updated);
+  };
 
   // Fetch leaves from persistent backend database
   const loadLeaves = useCallback(async () => {
@@ -190,9 +207,9 @@ export const LeaveManagement: React.FC = () => {
       setIsApplyModalOpen(false);
       setApplyForm({
         leaveType: 'Annual Leave',
-        startDate: '24 Nov 2026',
-        endDate: '25 Nov 2026',
-        days: 2,
+        startDate: '',
+        endDate: '',
+        days: 1,
         reason: '',
       });
     } catch (err: any) {
@@ -572,7 +589,7 @@ export const LeaveManagement: React.FC = () => {
             <Input
               label="From Date *"
               value={applyForm.startDate}
-              onChange={(e) => setApplyForm({ ...applyForm, startDate: e.target.value })}
+              onChange={(e) => handleDateChange('startDate', e.target.value)}
               placeholder="e.g. 24 Nov 2026"
               disabled={formSubmitting}
               required
@@ -580,7 +597,7 @@ export const LeaveManagement: React.FC = () => {
             <Input
               label="To Date *"
               value={applyForm.endDate}
-              onChange={(e) => setApplyForm({ ...applyForm, endDate: e.target.value })}
+              onChange={(e) => handleDateChange('endDate', e.target.value)}
               placeholder="e.g. 25 Nov 2026"
               disabled={formSubmitting}
               required
@@ -592,7 +609,7 @@ export const LeaveManagement: React.FC = () => {
             type="number"
             min="1"
             value={applyForm.days}
-            onChange={(e) => setApplyForm({ ...applyForm, days: Number(e.target.value) })}
+            readOnly
             disabled={formSubmitting}
             required
           />

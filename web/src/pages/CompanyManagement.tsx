@@ -44,8 +44,8 @@ export const CompanyManagement: React.FC = () => {
     name: '',
     code: '',
     address: '',
-    latitude: '12.9716',
-    longitude: '77.5946',
+    latitude: '',
+    longitude: '',
     geofenceRadiusMeters: 100
   });
 
@@ -72,6 +72,21 @@ export const CompanyManagement: React.FC = () => {
     });
   }, [registerRefreshHandler, loadBranches]);
 
+  const handleCloseModal = () => {
+    if (formSubmitting) return;
+    setIsModalOpen(false);
+    setActiveBranch(null);
+    setFormError(null);
+    setBranchForm({
+      name: '',
+      code: '',
+      address: '',
+      latitude: '',
+      longitude: '',
+      geofenceRadiusMeters: 100
+    });
+  };
+
   const handleOpenAdd = () => {
     setActiveBranch(null);
     setFormError(null);
@@ -79,8 +94,8 @@ export const CompanyManagement: React.FC = () => {
       name: '',
       code: '',
       address: '',
-      latitude: '12.9716',
-      longitude: '77.5946',
+      latitude: '',
+      longitude: '',
       geofenceRadiusMeters: 100
     });
     setIsModalOpen(true);
@@ -105,19 +120,37 @@ export const CompanyManagement: React.FC = () => {
 
     setFormSubmitting(true);
     try {
-      const newBranch = await api.createBranch({
-        name: branchForm.name.trim(),
-        code: branchForm.code.trim().toUpperCase(),
-        address: branchForm.address.trim(),
-        latitude: parseFloat(branchForm.latitude) || 12.9716,
-        longitude: parseFloat(branchForm.longitude) || 77.5946,
-        geofenceRadiusMeters: 100,
-        employeeCount: 0,
-        status: 'Active'
-      });
+      if (activeBranch) {
+        // Edit Mode: Update existing branch by its ID
+        const updated = await api.updateBranch(activeBranch.id, {
+          name: branchForm.name.trim(),
+          code: branchForm.code.trim().toUpperCase(),
+          address: branchForm.address.trim(),
+          latitude: parseFloat(branchForm.latitude) || 12.9716,
+          longitude: parseFloat(branchForm.longitude) || 77.5946,
+          geofenceRadiusMeters: branchForm.geofenceRadiusMeters || 100,
+        });
 
-      setBranches((prev) => [...prev, newBranch]);
-      setIsModalOpen(false);
+        setBranches((prev) =>
+          prev.map((b) => (b.id === activeBranch.id ? { ...b, ...updated } : b))
+        );
+      } else {
+        // Create Mode: Add new branch
+        const newBranch = await api.createBranch({
+          name: branchForm.name.trim(),
+          code: branchForm.code.trim().toUpperCase(),
+          address: branchForm.address.trim(),
+          latitude: parseFloat(branchForm.latitude) || 12.9716,
+          longitude: parseFloat(branchForm.longitude) || 77.5946,
+          geofenceRadiusMeters: 100,
+          employeeCount: 0,
+          status: 'Active'
+        });
+
+        setBranches((prev) => [...prev, newBranch]);
+      }
+
+      handleCloseModal();
     } catch (err: any) {
       console.error('Failed to save branch:', err);
       setFormError(err.message || 'Failed to save branch. Please retry.');
@@ -139,9 +172,18 @@ export const CompanyManagement: React.FC = () => {
           </p>
         </div>
 
-        <Button onClick={handleOpenAdd} icon={<Plus size={16} />}>
+        <button
+          onClick={handleOpenAdd}
+          className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-full text-sm font-semibold text-white select-none transition-all
+            bg-gradient-to-r from-[#59209B] to-[#86357E]
+            hover:brightness-110 hover:shadow-lg hover:shadow-purple-400/30
+            active:scale-[0.97] active:brightness-95
+            focus:outline-none focus:ring-2 focus:ring-[#7352eb] focus:ring-offset-2
+            disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          <Plus size={16} aria-hidden="true" />
           Add New Branch
-        </Button>
+        </button>
       </div>
 
       {fetchError && (
@@ -271,10 +313,16 @@ export const CompanyManagement: React.FC = () => {
                           });
                           setIsModalOpen(true);
                         }}
-                        title="Edit Branch Coordinates"
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-[#6534E8] hover:bg-purple-50 transition-colors"
+                        title={`Edit branch: ${b.name}`}
+                        aria-label={`Edit branch: ${b.name}`}
+                        className="inline-flex items-center justify-center w-11 h-11 rounded-full
+                          bg-purple-100 text-[#6534E8]
+                          hover:bg-purple-200 hover:text-[#59209B] hover:shadow-md hover:shadow-purple-300/40
+                          active:scale-95 active:bg-purple-300
+                          focus:outline-none focus:ring-2 focus:ring-[#7352eb] focus:ring-offset-2
+                          transition-all"
                       >
-                        <Edit2 size={16} />
+                        <Edit2 size={16} aria-hidden="true" />
                       </button>
                     </td>
                   </tr>
@@ -288,23 +336,45 @@ export const CompanyManagement: React.FC = () => {
       {/* 4. Add/Edit Branch Modal */}
       <Modal
         isOpen={isModalOpen}
-        onClose={() => { if (!formSubmitting) setIsModalOpen(false); }}
-        title={activeBranch ? `Edit Branch: ${activeBranch.name}` : 'Add Company Branch'}
+        onClose={handleCloseModal}
+        title={activeBranch ? 'Edit Branch' : 'Add Company Branch'}
         subtitle="Specify geofence coordinates for automated 100m attendance validation"
         badge="Enterprise Location"
         footer={
           <>
-            <Button variant="outline" size="sm" disabled={formSubmitting} onClick={() => setIsModalOpen(false)}>
+            {/* Cancel — white pill with lavender border */}
+            <button
+              type="button"
+              disabled={formSubmitting}
+              onClick={handleCloseModal}
+              className="inline-flex items-center justify-center min-h-[44px] px-5 py-2 rounded-full text-sm font-semibold
+                bg-white text-[#59209B] border border-purple-300
+                hover:bg-purple-50 hover:border-purple-400 hover:shadow-sm
+                active:scale-[0.97] active:bg-purple-100
+                focus:outline-none focus:ring-2 focus:ring-[#7352eb] focus:ring-offset-2
+                disabled:opacity-60 disabled:cursor-not-allowed
+                transition-all select-none"
+            >
               Cancel
-            </Button>
-            <Button
-              size="sm"
+            </button>
+            {/* Save / Update — purple gradient pill */}
+            <button
+              type="button"
               disabled={formSubmitting}
               onClick={handleSaveBranch}
-              icon={formSubmitting ? <Loader2 size={14} className="animate-spin" /> : undefined}
+              className="inline-flex items-center justify-center gap-2 min-h-[44px] px-5 py-2 rounded-full text-sm font-semibold text-white
+                bg-gradient-to-r from-[#59209B] to-[#86357E]
+                hover:brightness-110 hover:shadow-lg hover:shadow-purple-400/30
+                active:scale-[0.97] active:brightness-95
+                focus:outline-none focus:ring-2 focus:ring-[#7352eb] focus:ring-offset-2
+                disabled:opacity-60 disabled:cursor-not-allowed
+                transition-all select-none"
             >
-              {formSubmitting ? 'Saving...' : 'Save Branch'}
-            </Button>
+              {formSubmitting && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+              {formSubmitting
+                ? (activeBranch ? 'Updating...' : 'Saving...')
+                : (activeBranch ? 'Update Branch' : 'Save Branch')}
+            </button>
           </>
         }
       >

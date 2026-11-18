@@ -52,22 +52,22 @@ export const App: React.FC = () => {
                 <Route path="profile" element={<UserProfile />} />
                 <Route path="coming-soon/:module" element={<ComingSoon />} />
 
-                {/* 2. Manager + Admin/HR Protected Routes */}
-                <Route element={<RoleGuard allowedRoles={['ADMIN', 'HR', 'MANAGER']} />}>
+                {/* 2. Admin & HR Protected Routes */}
+                <Route element={<RoleGuard allowedRoles={['ADMIN', 'HR']} />}>
+                  <Route path="employees" element={<EmployeeList />} />
                   <Route path="hybrid-approvals" element={<HybridApprovals />} />
                 </Route>
 
-                {/* 3. Admin & HR Protected Routes */}
-                <Route element={<RoleGuard allowedRoles={['ADMIN', 'HR']} />}>
-                  <Route path="company" element={<CompanyManagement />} />
-                  <Route path="employees" element={<EmployeeList />} />
+                {/* 3. Admin, HR & Manager Protected Routes */}
+                <Route element={<RoleGuard allowedRoles={['ADMIN', 'HR', 'MANAGER']} />}>
                   <Route path="shifts" element={<ShiftManagement />} />
                   <Route path="reports" element={<ReportsAnalytics />} />
-                  <Route path="audit-logs" element={<AuditLogs />} />
                 </Route>
 
-                {/* 4. Super Admin Only Protected Routes (Role & Permission configuration) */}
+                {/* 4. Super Admin Only Protected Routes */}
                 <Route element={<RoleGuard allowedRoles={['ADMIN']} />}>
+                  <Route path="company" element={<CompanyManagement />} />
+                  <Route path="audit-logs" element={<AuditLogs />} />
                   <Route path="settings" element={<SettingsRoles />} />
                 </Route>
               </Route>

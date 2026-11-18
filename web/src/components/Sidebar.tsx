@@ -118,37 +118,51 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen, onCloseMobile }) =
                 onClick={onCloseMobile}
                 className={({ isActive }) =>
                   [
-                    'sidebar-nav-item group flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all duration-150 outline-none',
-                    'focus-visible:ring-2 focus-visible:ring-[#6534E8] focus-visible:ring-offset-1 focus-visible:ring-offset-[#F3EFFF]',
+                    'group flex items-center justify-between px-2.5 py-1.5 rounded-xl text-sm transition-all duration-150 outline-none',
+                    'focus-visible:ring-2 focus-visible:ring-[#6534E8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F3EFFF]',
                     isActive
-                      ? 'nav-active font-semibold'
-                      : 'font-medium nav-inactive',
+                      ? 'bg-white font-bold shadow-sm'
+                      : 'font-medium hover:bg-[#EAE0F8]/60',
                   ].join(' ')
+                }
+                style={({ isActive }) =>
+                  isActive
+                    ? { border: '1px solid #D9C5F0', color: '#59209B' }
+                    : { border: '1px solid transparent', color: '#33294a' }
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Icon
-                        size={20}
-                        className="shrink-0 transition-colors duration-150"
-                        style={{ color: isActive ? '#6534E8' : '#151936' }}
-                        strokeWidth={isActive ? 2.2 : 1.8}
-                      />
+                    <div className="flex items-center gap-3 min-w-0 py-0.5">
+                      {/* ── Gradient tile ── */}
                       <span
-                        className="leading-snug"
+                        className="inline-flex items-center justify-center shrink-0 transition-all duration-150"
                         style={{
-                          color: isActive ? '#6534E8' : '#151936',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          maxWidth: '148px',
+                          width: 32,
+                          height: 32,
+                          borderRadius: 9,
+                          background: isActive
+                            ? 'linear-gradient(135deg, #59209B, #86357E)'
+                            : '#EAE0F8',
                         }}
+                        aria-hidden="true"
+                      >
+                        <Icon
+                          size={20}
+                          strokeWidth={isActive ? 2.2 : 1.9}
+                          style={{ color: isActive ? '#ffffff' : '#6434A2' }}
+                        />
+                      </span>
+
+                      <span
+                        className="leading-snug truncate"
+                        style={{ maxWidth: 140 }}
                         title={item.name}
                       >
                         {item.name}
                       </span>
                     </div>
+
                     {item.badge && (
                       <span
                         className="ml-auto text-[10px] px-1.5 py-0.5 rounded font-semibold shrink-0"

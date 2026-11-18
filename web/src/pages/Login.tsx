@@ -11,6 +11,9 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
 
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
@@ -24,14 +27,20 @@ export const Login: React.FC = () => {
     e.preventDefault();
     if (loading) return;
     setError(null);
+    setEmailError(null);
+    setPasswordError(null);
 
     const trimmedEmail = email.trim();
+    let hasFieldErrors = false;
     if (!trimmedEmail) {
-      setError('Please enter your Employee ID or email address.');
-      return;
+      setEmailError('Employee ID / Email is required');
+      hasFieldErrors = true;
     }
     if (!password) {
-      setError('Please enter your password.');
+      setPasswordError('Password is required');
+      hasFieldErrors = true;
+    }
+    if (hasFieldErrors) {
       return;
     }
 
@@ -182,7 +191,7 @@ export const Login: React.FC = () => {
                 htmlFor="login-email"
                 className="block text-xs sm:text-sm font-semibold text-[#111827] mb-2"
               >
-                Employee ID / Email
+                Employee ID / Email <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#94A3B8]">
@@ -194,14 +203,18 @@ export const Login: React.FC = () => {
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
+                    setEmailError(null);
                     setError(null);
                   }}
                   disabled={loading}
                   placeholder="Enter your employee ID or email"
                   autoComplete="username"
-                  className="w-full h-[50px] pl-10 pr-3.5 bg-white/90 border border-[#E2E8F0] rounded-xl text-sm text-[#111827] placeholder:text-[#94A3B8] shadow-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5B2FE3] focus:border-transparent transition-all disabled:opacity-60 disabled:bg-gray-50"
+                  className={`w-full h-[50px] pl-10 pr-3.5 bg-white/90 border rounded-xl text-sm text-[#111827] placeholder:text-[#94A3B8] shadow-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5B2FE3] focus:border-transparent transition-all disabled:opacity-60 disabled:bg-gray-50 ${
+                    emailError ? 'border-red-400 focus:ring-red-400' : 'border-[#E2E8F0]'
+                  }`}
                 />
               </div>
+              {emailError && <p className="mt-1.5 text-xs text-red-600 font-medium">{emailError}</p>}
             </div>
 
             {/* Password Input */}
@@ -210,7 +223,7 @@ export const Login: React.FC = () => {
                 htmlFor="login-password"
                 className="block text-xs sm:text-sm font-semibold text-[#111827] mb-2"
               >
-                Password
+                Password <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#94A3B8]">
@@ -222,12 +235,15 @@ export const Login: React.FC = () => {
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
+                    setPasswordError(null);
                     setError(null);
                   }}
                   disabled={loading}
                   placeholder="Enter your password"
                   autoComplete="current-password"
-                  className="w-full h-[50px] pl-10 pr-11 bg-white/90 border border-[#E2E8F0] rounded-xl text-sm text-[#111827] placeholder:text-[#94A3B8] shadow-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5B2FE3] focus:border-transparent transition-all disabled:opacity-60 disabled:bg-gray-50"
+                  className={`w-full h-[50px] pl-10 pr-11 bg-white/90 border rounded-xl text-sm text-[#111827] placeholder:text-[#94A3B8] shadow-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#5B2FE3] focus:border-transparent transition-all disabled:opacity-60 disabled:bg-gray-50 ${
+                    passwordError ? 'border-red-400 focus:ring-red-400' : 'border-[#E2E8F0]'
+                  }`}
                 />
                 <button
                   type="button"
@@ -238,17 +254,18 @@ export const Login: React.FC = () => {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+              {passwordError && <p className="mt-1.5 text-xs text-red-600 font-medium">{passwordError}</p>}
+            </div>
 
-              {/* Right-aligned Forgot Password Link */}
-              <div className="flex justify-end mt-2.5">
-                <button
-                  type="button"
-                  onClick={() => setShowForgotModal(true)}
-                  className="text-xs sm:text-sm font-semibold text-[#5B2FE3] hover:text-[#4C24C9] hover:underline focus:outline-none focus:underline transition-colors"
-                >
-                  Forgot password?
-                </button>
-              </div>
+            {/* Right-aligned Forgot Password Link */}
+            <div className="flex justify-end mt-2.5">
+              <button
+                type="button"
+                onClick={() => setShowForgotModal(true)}
+                className="text-xs sm:text-sm font-semibold text-[#5B2FE3] hover:text-[#4C24C9] hover:underline focus:outline-none focus:underline transition-colors"
+              >
+                Forgot password?
+              </button>
             </div>
 
             {/* Full-width Vibrant Purple Sign In Button */}

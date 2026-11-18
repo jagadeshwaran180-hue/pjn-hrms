@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Search,
   Filter,
@@ -20,6 +20,24 @@ interface AuditEntry {
   target: string;
   ipAddress: string;
   status: 'SUCCESS' | 'WARNING' | 'FAILED';
+}
+
+function formatTimestamp(ts: string): string {
+  if (!ts) return '';
+  const dmyMatch = ts.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4}),?\s+(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (dmyMatch) {
+    const day = dmyMatch[1];
+    const month = parseInt(dmyMatch[2], 10);
+    const year = dmyMatch[3];
+    let hour = parseInt(dmyMatch[4], 10);
+    const min = dmyMatch[5];
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12 || 12;
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthName = months[month - 1] || 'Nov';
+    return `${day} ${monthName} ${year}, ${String(hour).padStart(2, '0')}:${min} ${ampm}`;
+  }
+  return ts;
 }
 
 export const AuditLogs: React.FC = () => {
@@ -178,7 +196,7 @@ export const AuditLogs: React.FC = () => {
                     <td className="py-3.5 px-4 sm:px-6">
                       <p className="font-mono text-xs font-bold text-[#6534E8]">{log.id}</p>
                       <p className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
-                        <Clock size={11} /> {log.timestamp}
+                        <Clock size={11} /> {formatTimestamp(log.timestamp)}
                       </p>
                     </td>
 

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   CalendarRange,
   Plus,
@@ -37,10 +37,23 @@ export const HolidayCalendar: React.FC = () => {
   const [holidayForm, setHolidayForm] = useState({
     name: '',
     date: '',
-    dayOfWeek: 'Monday',
+    dayOfWeek: '',
     type: 'Mandatory' as Holiday['type'],
     branchApplicability: 'All Branches'
   });
+
+  const handleHolidayDateChange = (val: string) => {
+    let derivedDay = '';
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) {
+      derivedDay = d.toLocaleDateString('en-US', { weekday: 'long' });
+    }
+    setHolidayForm((prev) => ({
+      ...prev,
+      date: val,
+      dayOfWeek: derivedDay || prev.dayOfWeek
+    }));
+  };
 
   const loadHolidays = useCallback(async () => {
     try {
@@ -262,14 +275,15 @@ export const HolidayCalendar: React.FC = () => {
               label="Date *"
               placeholder="e.g. 15 Aug 2026"
               value={holidayForm.date}
-              onChange={(e) => setHolidayForm({ ...holidayForm, date: e.target.value })}
+              onChange={(e) => handleHolidayDateChange(e.target.value)}
               disabled={formSubmitting}
               required
             />
             <Input
               label="Day of Week"
               value={holidayForm.dayOfWeek}
-              onChange={(e) => setHolidayForm({ ...holidayForm, dayOfWeek: e.target.value })}
+              readOnly
+              placeholder="Auto-calculated"
               disabled={formSubmitting}
               required
             />

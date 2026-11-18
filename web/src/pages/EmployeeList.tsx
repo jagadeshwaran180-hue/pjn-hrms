@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Search,
   Filter,
@@ -13,7 +13,10 @@ import {
   Briefcase,
   Loader2,
   AlertTriangle,
-  ShieldAlert
+  ShieldAlert,
+  Camera,
+  X,
+  Upload
 } from 'lucide-react';
 import { Employee } from '../types';
 import { Card, Badge, Button, Input, Modal, EmptyState } from '../components/ui';
@@ -38,6 +41,11 @@ export const EmployeeList: React.FC = () => {
   const [modalMode, setModalMode] = useState<'view' | 'edit' | 'add' | null>(null);
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Photo upload state
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Add/Edit Form State
   const [formData, setFormData] = useState({
@@ -103,9 +111,11 @@ export const EmployeeList: React.FC = () => {
 
   const handleOpenModal = (mode: 'view' | 'edit' | 'add', emp?: Employee) => {
     setFormError(null);
+    setPhotoError(null);
     setModalMode(mode);
     if (emp) {
       setSelectedEmployee(emp);
+      setPhotoDataUrl(emp.avatar || null);
       setFormData({
         id: emp.id,
         name: emp.name,
@@ -117,6 +127,7 @@ export const EmployeeList: React.FC = () => {
       });
     } else {
       setSelectedEmployee(null);
+      setPhotoDataUrl(null);
       const nextId = `EMP-0${employees.length + 1}`.padStart(7, '0');
       setFormData({
         id: nextId,
@@ -134,6 +145,34 @@ export const EmployeeList: React.FC = () => {
     if (formSubmitting) return;
     setModalMode(null);
     setSelectedEmployee(null);
+    setPhotoDataUrl(null);
+    setPhotoError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  /** Handle file selection: validate type/size and read as base64 */
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPhotoError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      setPhotoError('Only JPG, PNG, and WebP files are supported.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoError('File exceeds the 5 MB limit. Please choose a smaller image.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setPhotoDataUrl(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSaveEmployee = async (e: React.FormEvent) => {
@@ -155,21 +194,19 @@ export const EmployeeList: React.FC = () => {
 
     setFormSubmitting(true);
     try {
+      const payload = {
+        ...formData,
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        designation: formData.designation.trim(),
+        avatar: photoDataUrl || undefined,
+      };
+
       if (modalMode === 'add') {
-        const newEmp = await api.createEmployee({
-          ...formData,
-          name: formData.name.trim(),
-          email: formData.email.trim(),
-          designation: formData.designation.trim(),
-        });
+        const newEmp = await api.createEmployee(payload);
         setEmployees((prev) => [newEmp, ...prev]);
       } else if (modalMode === 'edit' && selectedEmployee) {
-        const updated = await api.updateEmployee(selectedEmployee.id, {
-          ...formData,
-          name: formData.name.trim(),
-          email: formData.email.trim(),
-          designation: formData.designation.trim(),
-        });
+        const updated = await api.updateEmployee(selectedEmployee.id, payload);
         setEmployees((prev) =>
           prev.map((emp) => (emp.id === selectedEmployee.id ? { ...emp, ...updated } : emp))
         );
@@ -298,9 +335,17 @@ export const EmployeeList: React.FC = () => {
                     {/* Employee Name & ID */}
                     <td className="py-3.5 px-4 sm:px-6">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-purple-100 text-[#6534E8] font-bold text-xs flex items-center justify-center shrink-0">
-                          {emp.name.charAt(0)}
-                        </div>
+                        {emp.avatar ? (
+                          <img
+                            src={emp.avatar}
+                            alt={emp.name}
+                            className="w-9 h-9 rounded-full object-cover shrink-0 ring-2 ring-purple-100"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-purple-100 text-[#6534E8] font-bold text-xs flex items-center justify-center shrink-0">
+                            {emp.name.charAt(0)}
+                          </div>
+                        )}
                         <div>
                           <p className="font-semibold text-gray-900 leading-tight">{emp.name}</p>
                           <p className="text-xs font-mono text-[#6534E8] mt-0.5">{emp.id}</p>
@@ -461,9 +506,17 @@ export const EmployeeList: React.FC = () => {
         {modalMode === 'view' && selectedEmployee ? (
           <div className="space-y-4">
             <div className="flex items-center gap-4 p-4 rounded-xl bg-purple-50/50 border border-purple-100">
-              <div className="w-14 h-14 rounded-2xl bg-[#6534E8] text-white flex items-center justify-center font-bold text-xl shadow-md">
-                {selectedEmployee.name.charAt(0)}
-              </div>
+              {selectedEmployee.avatar ? (
+                <img
+                  src={selectedEmployee.avatar}
+                  alt={selectedEmployee.name}
+                  className="w-14 h-14 rounded-2xl object-cover shrink-0 ring-2 ring-purple-200 shadow-md"
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-2xl bg-[#6534E8] text-white flex items-center justify-center font-bold text-xl shadow-md">
+                  {selectedEmployee.name.charAt(0)}
+                </div>
+              )}
               <div>
                 <h4 className="font-bold text-base text-gray-900">{selectedEmployee.name}</h4>
                 <p className="text-xs text-gray-500">{selectedEmployee.designation}</p>
@@ -512,6 +565,111 @@ export const EmployeeList: React.FC = () => {
           </div>
         ) : (
           <form onSubmit={handleSaveEmployee} className="space-y-3">
+
+            {/* ── Profile Photo Upload ─────────────────────────────────── */}
+            <div>
+              <p className="text-xs font-semibold text-gray-700 mb-2">Profile Photo <span className="text-gray-400 font-normal">(optional · JPG, PNG, WebP · max 5 MB)</span></p>
+              <div className="flex items-center gap-4">
+                {/* Avatar preview circle */}
+                <div className="relative shrink-0">
+                  {photoDataUrl ? (
+                    <img
+                      src={photoDataUrl}
+                      alt="Profile preview"
+                      className="w-16 h-16 rounded-full object-cover ring-2 ring-purple-200 shadow"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-purple-100 text-[#6534E8] font-bold text-xl flex items-center justify-center ring-2 ring-purple-100">
+                      {formData.name ? formData.name.charAt(0).toUpperCase() : <Camera size={20} className="opacity-50" />}
+                    </div>
+                  )}
+                  {/* Camera overlay badge */}
+                  {!photoDataUrl && (
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#6534E8] text-white flex items-center justify-center shadow">
+                      <Camera size={10} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Hidden file input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  aria-label="Upload profile photo"
+                  disabled={formSubmitting}
+                  onChange={handleFileChange}
+                />
+
+                {/* Action buttons */}
+                <div className="flex flex-wrap gap-2">
+                  {!photoDataUrl ? (
+                    <button
+                      type="button"
+                      disabled={formSubmitting}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 min-h-[36px] px-4 py-1.5 rounded-full text-xs font-semibold text-white
+                        bg-gradient-to-r from-[#59209B] to-[#86357E]
+                        hover:brightness-110 hover:shadow-md hover:shadow-purple-400/30
+                        active:scale-[0.97] active:brightness-95
+                        focus:outline-none focus:ring-2 focus:ring-[#7352eb] focus:ring-offset-2
+                        disabled:opacity-60 disabled:cursor-not-allowed transition-all select-none"
+                    >
+                      <Upload size={13} aria-hidden="true" />
+                      Upload Photo
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={formSubmitting}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 min-h-[36px] px-4 py-1.5 rounded-full text-xs font-semibold text-white
+                          bg-gradient-to-r from-[#59209B] to-[#86357E]
+                          hover:brightness-110 hover:shadow-md hover:shadow-purple-400/30
+                          active:scale-[0.97] active:brightness-95
+                          focus:outline-none focus:ring-2 focus:ring-[#7352eb] focus:ring-offset-2
+                          disabled:opacity-60 disabled:cursor-not-allowed transition-all select-none"
+                      >
+                        <Camera size={13} aria-hidden="true" />
+                        Change Photo
+                      </button>
+                      <button
+                        type="button"
+                        disabled={formSubmitting}
+                        onClick={() => {
+                          setPhotoDataUrl(null);
+                          setPhotoError(null);
+                          if (fileInputRef.current) fileInputRef.current.value = '';
+                        }}
+                        className="inline-flex items-center gap-1.5 min-h-[36px] px-4 py-1.5 rounded-full text-xs font-semibold
+                          bg-white text-[#59209B] border border-purple-300
+                          hover:bg-purple-50 hover:border-purple-400
+                          active:scale-[0.97] active:bg-purple-100
+                          focus:outline-none focus:ring-2 focus:ring-[#7352eb] focus:ring-offset-2
+                          disabled:opacity-60 disabled:cursor-not-allowed transition-all select-none"
+                      >
+                        <X size={13} aria-hidden="true" />
+                        Remove Photo
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Photo validation error */}
+              {photoError && (
+                <p className="mt-2 text-xs text-red-600 font-medium flex items-center gap-1.5">
+                  <ShieldAlert size={13} className="shrink-0" />
+                  {photoError}
+                </p>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-gray-100 my-1" />
+
             <div className="grid grid-cols-2 gap-3">
               <Input
                 label="Employee ID"

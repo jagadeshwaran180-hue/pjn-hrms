@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Mail,
   Calendar,
@@ -13,7 +13,6 @@ import {
   Laptop,
   CheckCircle2,
   XCircle,
-  AlertCircle,
   Phone,
   Save,
   Download,
@@ -44,8 +43,8 @@ const mockAttendanceHistory = [
 
 const mockLeaveBalance = [
   { type: 'Annual Leave', total: 18, used: 4, remaining: 14, color: '#6534E8' },
-  { type: 'Sick Leave', total: 10, used: 2, remaining: 8, color: '#EF4444' },
-  { type: 'Casual Leave', total: 7, used: 2, remaining: 5, color: '#F59E0B' },
+  { type: 'Sick Leave', total: 12, used: 4, remaining: 8, color: '#EF4444' },
+  { type: 'Casual Leave', total: 6, used: 1, remaining: 5, color: '#F59E0B' },
 ];
 
 export const UserProfile: React.FC = () => {
@@ -439,7 +438,7 @@ export const UserProfile: React.FC = () => {
           <div className="space-y-3 text-xs">
             {[
               { icon: <CheckCircle2 size={14} className="text-emerald-500" />, text: 'GPS Check-In Verified at 09:02 AM - Today', sub: 'Within 14m radius • BLR-HQ' },
-              { icon: <AlertCircle size={14} className="text-amber-500" />, text: 'Leave Request submitted - 12 Nov 2026', sub: 'Annual Leave · 1 day' },
+              { icon: <Award size={14} className="text-[#6534E8]" />, text: 'Annual Leave allocation verified - 15 Nov 2026', sub: '14 days remaining' },
               { icon: <CheckCircle2 size={14} className="text-emerald-500" />, text: 'Checked in at 09:05 AM - 11 Nov 2026', sub: 'In-House • BLR-HQ' },
               { icon: <XCircle size={14} className="text-red-500" />, text: 'Late check-in - 10 Nov 2026', sub: 'Arrived at 09:30 AM' },
             ].map((item, i) => (

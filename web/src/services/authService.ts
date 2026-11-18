@@ -31,7 +31,14 @@ export const SYSTEM_ACCOUNTS: Record<string, Omit<UserSession, 'email'>> = {
     designation: 'System & HR Administrator',
   },
   'hr@pjntech.com': {
-    id: 'EMP-HR',
+    id: 'EMP-005',
+    name: 'Arun Kumar',
+    role: 'HR',
+    department: 'Human Resources',
+    designation: 'Senior HR Manager',
+  },
+  'arun@pjntech.com': {
+    id: 'EMP-005',
     name: 'Arun Kumar',
     role: 'HR',
     department: 'Human Resources',

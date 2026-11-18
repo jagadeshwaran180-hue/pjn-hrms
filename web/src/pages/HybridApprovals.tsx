@@ -75,8 +75,17 @@ export const HybridApprovals: React.FC = () => {
     });
   }, [registerRefreshHandler, loadRequests]);
 
+  // Helper to check if request is active today
+  const isCurrentlyValidToday = (req: HybridRequest) => {
+    if (req.status !== 'Approved') return false;
+    const today = new Date('2026-11-17T00:00:00');
+    const start = new Date(req.startDate);
+    const end = new Date(req.validUntil || req.endDate);
+    return today >= start && today <= end;
+  };
+
   const pendingCount = requests.filter((r) => r.status === 'Pending').length;
-  const approvedCount = requests.filter((r) => r.status === 'Approved').length;
+  const approvedCount = requests.filter(isCurrentlyValidToday).length;
   const revokedCount = requests.filter((r) => r.status === 'Revoked').length;
 
   const handleOpenReview = (req: HybridRequest) => {
@@ -420,9 +429,13 @@ export const HybridApprovals: React.FC = () => {
                         {isOwnRecord ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-200">
                             <Lock size={11} />
-                            Self-Request (Pending HR)
+                            {req.status === 'Approved'
+                              ? 'Approved (Self)'
+                              : req.status === 'Rejected'
+                              ? 'Rejected (Self)'
+                              : 'Self-Request (Pending HR)'}
                           </span>
-                        ) : canTakeAction ? (
+                        ) : canTakeAction && (user?.role === 'ADMIN' || user?.role === 'HR') ? (
                           <div className="flex items-center justify-end gap-1.5">
                             {req.status === 'Pending' && (
                               <Button size="sm" onClick={() => handleOpenReview(req)}>

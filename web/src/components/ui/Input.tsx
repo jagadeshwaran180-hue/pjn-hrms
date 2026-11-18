@@ -10,11 +10,16 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, icon, rightElement, required, className = '', ...props }, ref) => {
+    // Prevent double asterisk if label already has '*' or if required is true
+    const hasAsterisk = label?.trim().endsWith('*');
+    const cleanLabel = hasAsterisk ? label?.trim().replace(/\s*\*+$/, '') : label;
+    const showRequired = required || hasAsterisk;
+
     return (
       <div className="w-full">
-        {label && (
+        {cleanLabel && (
           <label className="block text-xs font-semibold text-[#111827] mb-1.5">
-            {label} {required && <span className="text-red-500">*</span>}
+            {cleanLabel} {showRequired && <span className="text-red-500">*</span>}
           </label>
         )}
         <div className="relative">

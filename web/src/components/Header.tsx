@@ -12,6 +12,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar, title = 'Dashboard' }) => {
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { isRefreshing, refresh, lastRefreshed } = useRefresh();
@@ -117,15 +118,92 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar, title = 'Da
           </div>
 
           {/* Notifications */}
-          <button
-            type="button"
-            className="relative p-1.5 sm:p-2 rounded-lg text-slate-500 hover:text-[#111827] hover:bg-slate-100 transition-colors"
-            title="Notifications"
-            aria-label="Notifications"
-          >
-            <Bell size={18} />
-            <span className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 w-2 h-2 rounded-full bg-[#EF4444]" />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setShowNotifications(!showNotifications);
+                setShowDropdown(false);
+              }}
+              className="relative p-1.5 sm:p-2 rounded-lg text-slate-500 hover:text-[#111827] hover:bg-slate-100 transition-colors"
+              title="Notifications"
+              aria-label="Notifications"
+            >
+              <Bell size={18} />
+              <span className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 w-2 h-2 rounded-full bg-[#EF4444]" />
+            </button>
+
+            {/* Notification Panel (BUG-032) */}
+            {showNotifications && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-[#E5E2F0] py-2 z-50 text-sm animate-modal-lift">
+                  <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-[#111827] text-xs">Notifications</h4>
+                      <p className="text-[10px] text-slate-500">2 pending action items</p>
+                    </div>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-[#6534E8]">
+                      New
+                    </span>
+                  </div>
+
+                  <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                    <div
+                      onClick={() => { setShowNotifications(false); navigate('/regularization'); }}
+                      className="p-3 hover:bg-purple-50/30 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 mt-1 shrink-0" />
+                        <div>
+                          <p className="text-xs font-semibold text-gray-800">Regularization Pending</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5">REG-501 (Jagadeesh K) awaiting approval review.</p>
+                          <span className="text-[10px] text-purple-600 font-medium">14 Nov 2026</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      onClick={() => { setShowNotifications(false); navigate('/hybrid-approvals'); }}
+                      className="p-3 hover:bg-purple-50/30 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1 shrink-0" />
+                        <div>
+                          <p className="text-xs font-semibold text-gray-800">Hybrid Work Active</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5">Ayesha N approved for remote work today.</p>
+                          <span className="text-[10px] text-purple-600 font-medium">17 Nov 2026</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      onClick={() => { setShowNotifications(false); navigate('/attendance'); }}
+                      className="p-3 hover:bg-purple-50/30 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="w-2 h-2 rounded-full bg-blue-500 mt-1 shrink-0" />
+                        <div>
+                          <p className="text-xs font-semibold text-gray-800">Geofence Enforced</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5">100m perimeter validation active across 3 operating branches.</p>
+                          <span className="text-[10px] text-gray-400 font-medium">Today</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="px-4 py-2 border-t border-slate-100 text-center">
+                    <button
+                      onClick={() => setShowNotifications(false)}
+                      className="text-xs font-semibold text-[#6534E8] hover:underline"
+                    >
+                      Dismiss Notifications
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
 
           {/* Vertical divider */}
           <div className="h-6 w-px bg-slate-200" />

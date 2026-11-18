@@ -84,6 +84,14 @@ export function formatElapsed(checkInStr: string, checkOutStr: string): string {
   return `${String(hrs).padStart(2, '0')}h ${String(mins).padStart(2, '0')}m`;
 }
 
+// Helper to generate consistent audit timestamp (BUG-031)
+export function getAuditTimestamp(): string {
+  const now = new Date();
+  const datePart = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const timePart = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  return `${datePart}, ${timePart}`;
+}
+
 // Helper to extract session from request headers
 export function extractSession(req: IncomingMessage): UserSession | null {
   const authHeader = req.headers['authorization'];
@@ -151,7 +159,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         await updateDB((db) => {
           db.auditLogs.unshift({
             id: `AUD-${Math.floor(100 + Math.random() * 900)}`,
-            timestamp: new Date().toLocaleString('en-GB'),
+            timestamp: getAuditTimestamp(),
             actor: 'Unknown user',
             role: 'UNKNOWN',
             action: 'Failed Login Attempt (Invalid Password)',
@@ -354,7 +362,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         // Cascade 3: Record Audit Entry
         db.auditLogs.unshift({
           id: `AUD-${Math.floor(100 + Math.random() * 900)}`,
-          timestamp: new Date().toLocaleString('en-GB'),
+          timestamp: getAuditTimestamp(),
           actor: session.email,
           role: session.role,
           action: `${decision} Leave Application`,
@@ -557,7 +565,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         if (auditAction) {
           db.auditLogs.unshift({
             id: `AUD-${Math.floor(100 + Math.random() * 900)}`,
-            timestamp: new Date().toLocaleString('en-GB'),
+            timestamp: getAuditTimestamp(),
             actor: session.email,
             role: session.role,
             action: auditAction,
@@ -695,7 +703,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         // Audit Log entry
         db.auditLogs.unshift({
           id: `AUD-${Math.floor(100 + Math.random() * 900)}`,
-          timestamp: new Date().toLocaleString('en-GB'),
+          timestamp: getAuditTimestamp(),
           actor: session.email,
           role: session.role,
           action: `${decision} Attendance Regularization`,
@@ -720,7 +728,8 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
     if (pathname === '/api/attendance') {
       if (method === 'GET') {
         const db = getDB();
-        let logs = db.attendanceLogs;
+        // Today is 17 Nov 2026. Only return attendance logs for today so future date leaves don't appear in today's log table
+        let logs = db.attendanceLogs.filter((l) => l.date === '17 Nov 2026' || l.date === '16 Nov 2026');
         if (session.role === 'EMPLOYEE') {
           logs = logs.filter((l) => l.empId === session.id);
         } else if (session.role === 'MANAGER') {
@@ -766,7 +775,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         await updateDB((d) => {
           d.auditLogs.unshift({
             id: `AUD-${Math.floor(100 + Math.random() * 900)}`,
-            timestamp: new Date().toLocaleString('en-GB'),
+            timestamp: getAuditTimestamp(),
             actor: session.email,
             role: session.role,
             action: 'Geofence Perimeter Breach - Check-In Rejected',
@@ -849,7 +858,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
         // Audit Log
         database.auditLogs.unshift({
           id: `AUD-${Math.floor(100 + Math.random() * 900)}`,
-          timestamp: new Date().toLocaleString('en-GB'),
+          timestamp: getAuditTimestamp(),
           actor: session.email,
           role: session.role,
           action: log.checkOut !== '--:--' ? 'GPS Check-Out Punch' : 'GPS Check-In Punch',
@@ -896,9 +905,16 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
           return true;
         }
 
-        const newEmp = await updateDB((db) => {
+        const db = getDB();
+        const emailLower = String(body.email).trim().toLowerCase();
+        if (db.employees.some((e) => e.email.toLowerCase() === emailLower)) {
+          sendJSON(res, 400, { error: `Email '${body.email}' is already in use by another employee.` });
+          return true;
+        }
+
+        const newEmp = await updateDB((database) => {
           const emp: Employee = {
-            id: body.id || `EMP-0${db.employees.length + 1}`,
+            id: body.id || `EMP-0${database.employees.length + 1}`,
             name: body.name,
             department: body.department,
             designation: body.designation || 'Staff',
@@ -907,11 +923,11 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
             joinDate: body.joinDate || '16 Nov 2026',
             role: body.role || 'EMPLOYEE',
           };
-          db.employees.unshift(emp);
+          database.employees.unshift(emp);
 
-          db.auditLogs.unshift({
+          database.auditLogs.unshift({
             id: `AUD-${Math.floor(100 + Math.random() * 900)}`,
-            timestamp: new Date().toLocaleString('en-GB'),
+            timestamp: getAuditTimestamp(),
             actor: session.email,
             role: session.role,
             action: 'Added New Employee Profile',
@@ -965,11 +981,17 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
           return true;
         }
         const body = await parseBody(req);
-        const branch = await updateDB((db) => {
+        const codeUpper = (body.code || 'BR').trim().toUpperCase();
+        const db = getDB();
+        if (db.branches.some((b) => b.code.toUpperCase() === codeUpper)) {
+          sendJSON(res, 400, { error: `Branch code '${codeUpper}' is already in use. Each branch must have a unique code.` });
+          return true;
+        }
+        const branch = await updateDB((database) => {
           const b: Branch = {
-            id: `BR-0${db.branches.length + 1}`,
+            id: `BR-0${database.branches.length + 1}`,
             name: body.name,
-            code: (body.code || 'BR').toUpperCase(),
+            code: codeUpper,
             address: body.address,
             latitude: Number(body.latitude) || 12.9238,
             longitude: Number(body.longitude) || 77.6834,
@@ -977,10 +999,48 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
             employeeCount: 0,
             status: 'Active',
           };
-          db.branches.push(b);
+          database.branches.push(b);
           return b;
         });
         sendJSON(res, 201, { success: true, branch });
+        return true;
+      }
+    }
+
+    const branchMatch = pathname.match(/^\/api\/branches\/([^/]+)$/);
+    if (branchMatch) {
+      const branchId = decodeURIComponent(branchMatch[1]);
+      if (method === 'PUT') {
+        if (session.role !== 'ADMIN') {
+          sendJSON(res, 403, { error: 'Forbidden: Admin only.' });
+          return true;
+        }
+        const body = await parseBody(req);
+        let updatedBranch: Branch | null = null;
+        await updateDB((db) => {
+          const idx = db.branches.findIndex((b) => b.id === branchId);
+          if (idx !== -1) {
+            db.branches[idx] = {
+              ...db.branches[idx],
+              name: body.name !== undefined ? body.name : db.branches[idx].name,
+              code: body.code !== undefined ? String(body.code).toUpperCase() : db.branches[idx].code,
+              address: body.address !== undefined ? body.address : db.branches[idx].address,
+              latitude: body.latitude !== undefined ? Number(body.latitude) : db.branches[idx].latitude,
+              longitude: body.longitude !== undefined ? Number(body.longitude) : db.branches[idx].longitude,
+              geofenceRadiusMeters: body.geofenceRadiusMeters !== undefined ? Number(body.geofenceRadiusMeters) : db.branches[idx].geofenceRadiusMeters,
+              status: body.status !== undefined ? body.status : db.branches[idx].status,
+              // Keep id and employeeCount preserved
+            };
+            updatedBranch = db.branches[idx];
+          }
+        });
+
+        if (!updatedBranch) {
+          sendJSON(res, 404, { error: 'Branch not found.' });
+          return true;
+        }
+
+        sendJSON(res, 200, { success: true, branch: updatedBranch });
         return true;
       }
     }
@@ -1035,7 +1095,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 
         db.auditLogs.unshift({
           id: `AUD-${Math.floor(100 + Math.random() * 900)}`,
-          timestamp: new Date().toLocaleString('en-GB'),
+          timestamp: getAuditTimestamp(),
           actor: session.email,
           role: session.role,
           action: 'Updated Working Shift',
@@ -1119,7 +1179,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
 
           db.auditLogs.unshift({
             id: `AUD-${Math.floor(100 + Math.random() * 900)}`,
-            timestamp: new Date().toLocaleString('en-GB'),
+            timestamp: getAuditTimestamp(),
             actor: session.email,
             role: session.role,
             action: 'Updated System Settings',
@@ -1149,12 +1209,16 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       if (session.role === 'EMPLOYEE') {
         const myLog = logs.find((l) => l.empId === session.id);
         const myLeaves = leaves.filter((l) => l.empId === session.id);
+        const myRegs = db.regularizationRequests.filter((r) => r.empId === session.id);
+        const isCheckedIn = !!myLog && myLog.checkIn !== '--:--' && (!myLog.checkOut || myLog.checkOut === '--:--');
         sendJSON(res, 200, {
           role: 'EMPLOYEE',
           myPunch: myLog?.checkIn || '09:02 AM',
           myStatus: myLog?.status || 'Present',
+          isCheckedIn,
           pendingLeaves: myLeaves.filter((l) => l.status === 'Pending').length,
           approvedLeaves: myLeaves.filter((l) => l.status === 'Approved').length,
+          pendingRegularizations: myRegs.filter((r) => r.status === 'Pending').length,
           leaveBalance: 14,
         });
         return true;

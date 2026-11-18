@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import {
   Calendar,
   Filter,
@@ -18,19 +18,134 @@ interface DepartmentAttendance {
   avgHours: string;
 }
 
-const deptStats: DepartmentAttendance[] = [
-  { department: 'Engineering', totalStaff: 48, presentRate: 94.2, lateRate: 2.1, avgHours: '8h 52m' },
-  { department: 'Mobile Apps', totalStaff: 22, presentRate: 96.0, lateRate: 1.5, avgHours: '9h 05m' },
-  { department: 'Backend', totalStaff: 26, presentRate: 92.3, lateRate: 3.8, avgHours: '8h 40m' },
-  { department: 'Quality Assurance', totalStaff: 18, presentRate: 91.5, lateRate: 2.2, avgHours: '8h 35m' },
-  { department: 'Database', totalStaff: 12, presentRate: 95.0, lateRate: 0.0, avgHours: '9h 10m' },
-  { department: 'Human Resources', totalStaff: 14, presentRate: 88.0, lateRate: 4.0, avgHours: '8h 15m' },
-  { department: 'DevOps & Cloud', totalStaff: 14, presentRate: 97.2, lateRate: 1.0, avgHours: '9h 22m' }
-];
+interface IntervalData {
+  kpis: {
+    avgAttendance: string;
+    attendanceDelta: string;
+    onTimeRate: string;
+    onTimeSub: string;
+    geofenceCompliance: string;
+    geofenceSub: string;
+    avgDailyHours: string;
+    hoursSub: string;
+  };
+  deptStats: DepartmentAttendance[];
+}
+
+const intervalDataMap: Record<string, IntervalData> = {
+  'Today (17 Nov 2026)': {
+    kpis: {
+      avgAttendance: '92.2%',
+      attendanceDelta: '+0.8% vs yesterday (142/154)',
+      onTimeRate: '96.5%',
+      onTimeSub: '< 15m grace (09:15 AM)',
+      geofenceCompliance: '98.6%',
+      geofenceSub: '0 unapproved breaches',
+      avgDailyHours: '8h 45m',
+      hoursSub: 'Live shift in progress',
+    },
+    deptStats: [
+      { department: 'Engineering', totalStaff: 48, presentRate: 93.8, lateRate: 2.1, avgHours: '8h 45m' },
+      { department: 'Mobile Apps', totalStaff: 22, presentRate: 95.5, lateRate: 0.0, avgHours: '9h 00m' },
+      { department: 'Backend', totalStaff: 26, presentRate: 88.5, lateRate: 3.8, avgHours: '8h 35m' },
+      { department: 'Quality Assurance', totalStaff: 18, presentRate: 94.4, lateRate: 5.6, avgHours: '8h 40m' },
+      { department: 'Database', totalStaff: 12, presentRate: 91.7, lateRate: 0.0, avgHours: '8h 50m' },
+      { department: 'Human Resources', totalStaff: 14, presentRate: 85.7, lateRate: 7.1, avgHours: '8h 20m' },
+      { department: 'DevOps & Cloud', totalStaff: 14, presentRate: 92.9, lateRate: 0.0, avgHours: '9h 10m' },
+    ]
+  },
+  'Current Week (16 - 22 Nov 2026)': {
+    kpis: {
+      avgAttendance: '93.1%',
+      attendanceDelta: '+1.2% vs last week',
+      onTimeRate: '97.1%',
+      onTimeSub: '< 15m grace threshold',
+      geofenceCompliance: '98.4%',
+      geofenceSub: '1 flagged drift resolved',
+      avgDailyHours: '8h 48m',
+      hoursSub: 'Target: 8h 30m / shift',
+    },
+    deptStats: [
+      { department: 'Engineering', totalStaff: 48, presentRate: 94.0, lateRate: 2.1, avgHours: '8h 50m' },
+      { department: 'Mobile Apps', totalStaff: 22, presentRate: 95.5, lateRate: 1.5, avgHours: '9h 02m' },
+      { department: 'Backend', totalStaff: 26, presentRate: 91.0, lateRate: 3.5, avgHours: '8h 38m' },
+      { department: 'Quality Assurance', totalStaff: 18, presentRate: 92.2, lateRate: 2.2, avgHours: '8h 36m' },
+      { department: 'Database', totalStaff: 12, presentRate: 94.2, lateRate: 0.0, avgHours: '9h 05m' },
+      { department: 'Human Resources', totalStaff: 14, presentRate: 87.5, lateRate: 4.2, avgHours: '8h 18m' },
+      { department: 'DevOps & Cloud', totalStaff: 14, presentRate: 96.4, lateRate: 1.0, avgHours: '9h 18m' },
+    ]
+  },
+  'This Month (Nov 2026)': {
+    kpis: {
+      avgAttendance: '93.6%',
+      attendanceDelta: '+1.8% vs last period',
+      onTimeRate: '97.8%',
+      onTimeSub: '< 15m grace threshold',
+      geofenceCompliance: '98.2%',
+      geofenceSub: '0 unapproved breaches',
+      avgDailyHours: '8h 51m',
+      hoursSub: 'Target: 8h 30m / shift',
+    },
+    deptStats: [
+      { department: 'Engineering', totalStaff: 48, presentRate: 94.2, lateRate: 2.1, avgHours: '8h 52m' },
+      { department: 'Mobile Apps', totalStaff: 22, presentRate: 96.0, lateRate: 1.5, avgHours: '9h 05m' },
+      { department: 'Backend', totalStaff: 26, presentRate: 92.3, lateRate: 3.8, avgHours: '8h 40m' },
+      { department: 'Quality Assurance', totalStaff: 18, presentRate: 91.5, lateRate: 2.2, avgHours: '8h 35m' },
+      { department: 'Database', totalStaff: 12, presentRate: 95.0, lateRate: 0.0, avgHours: '9h 10m' },
+      { department: 'Human Resources', totalStaff: 14, presentRate: 88.0, lateRate: 4.0, avgHours: '8h 15m' },
+      { department: 'DevOps & Cloud', totalStaff: 14, presentRate: 97.2, lateRate: 1.0, avgHours: '9h 22m' }
+    ]
+  },
+  'Last Month (Oct 2026)': {
+    kpis: {
+      avgAttendance: '91.8%',
+      attendanceDelta: '-0.4% vs Sep 2026',
+      onTimeRate: '96.2%',
+      onTimeSub: '< 15m grace threshold',
+      geofenceCompliance: '97.9%',
+      geofenceSub: '2 breaches investigated',
+      avgDailyHours: '8h 42m',
+      hoursSub: 'Target: 8h 30m / shift',
+    },
+    deptStats: [
+      { department: 'Engineering', totalStaff: 48, presentRate: 92.5, lateRate: 3.1, avgHours: '8h 44m' },
+      { department: 'Mobile Apps', totalStaff: 22, presentRate: 93.8, lateRate: 2.2, avgHours: '8h 55m' },
+      { department: 'Backend', totalStaff: 26, presentRate: 90.4, lateRate: 4.2, avgHours: '8h 32m' },
+      { department: 'Quality Assurance', totalStaff: 18, presentRate: 89.8, lateRate: 3.0, avgHours: '8h 30m' },
+      { department: 'Database', totalStaff: 12, presentRate: 93.3, lateRate: 1.2, avgHours: '9h 00m' },
+      { department: 'Human Resources', totalStaff: 14, presentRate: 86.2, lateRate: 5.0, avgHours: '8h 10m' },
+      { department: 'DevOps & Cloud', totalStaff: 14, presentRate: 95.1, lateRate: 1.8, avgHours: '9h 12m' }
+    ]
+  },
+  'Q4 FY26 (Oct - Dec 2026)': {
+    kpis: {
+      avgAttendance: '92.7%',
+      attendanceDelta: '+1.1% vs Q3 FY26',
+      onTimeRate: '97.0%',
+      onTimeSub: '< 15m grace threshold',
+      geofenceCompliance: '98.1%',
+      geofenceSub: 'Across all quarters',
+      avgDailyHours: '8h 47m',
+      hoursSub: 'Quarterly run-rate',
+    },
+    deptStats: [
+      { department: 'Engineering', totalStaff: 48, presentRate: 93.4, lateRate: 2.6, avgHours: '8h 48m' },
+      { department: 'Mobile Apps', totalStaff: 22, presentRate: 94.9, lateRate: 1.8, avgHours: '9h 00m' },
+      { department: 'Backend', totalStaff: 26, presentRate: 91.4, lateRate: 4.0, avgHours: '8h 36m' },
+      { department: 'Quality Assurance', totalStaff: 18, presentRate: 90.7, lateRate: 2.6, avgHours: '8h 33m' },
+      { department: 'Database', totalStaff: 12, presentRate: 94.2, lateRate: 0.6, avgHours: '9h 05m' },
+      { department: 'Human Resources', totalStaff: 14, presentRate: 87.1, lateRate: 4.5, avgHours: '8h 13m' },
+      { department: 'DevOps & Cloud', totalStaff: 14, presentRate: 96.2, lateRate: 1.4, avgHours: '9h 17m' }
+    ]
+  }
+};
 
 export const ReportsAnalytics: React.FC = () => {
   const [selectedRange, setSelectedRange] = useState('This Month (Nov 2026)');
   const [exportNotice, setExportNotice] = useState<string | null>(null);
+
+  const activeData = intervalDataMap[selectedRange] || intervalDataMap['This Month (Nov 2026)'];
+  const { kpis, deptStats } = activeData;
 
   const handleExportCSV = () => {
     const csvHeader = 'Department,Total Staff,Present Rate (%),Late Rate (%),Average Daily Hours,Reporting Interval\n';
@@ -100,7 +215,7 @@ export const ReportsAnalytics: React.FC = () => {
             onChange={(e) => setSelectedRange(e.target.value)}
             className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#6534E8]"
           >
-            <option>Today (16 Nov 2026)</option>
+            <option>Today (17 Nov 2026)</option>
             <option>Current Week (16 - 22 Nov 2026)</option>
             <option>This Month (Nov 2026)</option>
             <option>Last Month (Oct 2026)</option>
@@ -118,33 +233,33 @@ export const ReportsAnalytics: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <p className="text-xs font-semibold text-gray-500 uppercase">Average Attendance</p>
-          <h3 className="text-2xl font-extrabold text-[#151936] mt-1">93.6%</h3>
+          <h3 className="text-2xl font-extrabold text-[#151936] mt-1">{kpis.avgAttendance}</h3>
           <p className="text-xs text-emerald-600 font-medium mt-1 flex items-center gap-1">
-            <TrendingUp size={13} /> +1.8% vs last period
+            <TrendingUp size={13} /> {kpis.attendanceDelta}
           </p>
         </Card>
 
         <Card>
           <p className="text-xs font-semibold text-gray-500 uppercase">On-Time Arrival Rate</p>
-          <h3 className="text-2xl font-extrabold text-[#151936] mt-1">97.8%</h3>
+          <h3 className="text-2xl font-extrabold text-[#151936] mt-1">{kpis.onTimeRate}</h3>
           <p className="text-xs text-purple-600 font-medium mt-1">
-            &lt; 15m grace threshold
+            {kpis.onTimeSub}
           </p>
         </Card>
 
         <Card>
           <p className="text-xs font-semibold text-gray-500 uppercase">Geofence Compliance</p>
-          <h3 className="text-2xl font-extrabold text-[#151936] mt-1">98.2%</h3>
+          <h3 className="text-2xl font-extrabold text-[#151936] mt-1">{kpis.geofenceCompliance}</h3>
           <p className="text-xs text-emerald-600 font-medium mt-1">
-            0 unapproved breaches
+            {kpis.geofenceSub}
           </p>
         </Card>
 
         <Card>
           <p className="text-xs font-semibold text-gray-500 uppercase">Avg Daily Workhours</p>
-          <h3 className="text-2xl font-extrabold text-[#151936] mt-1">8h 51m</h3>
+          <h3 className="text-2xl font-extrabold text-[#151936] mt-1">{kpis.avgDailyHours}</h3>
           <p className="text-xs text-gray-400 mt-1">
-            Target: 8h 30m / shift
+            {kpis.hoursSub}
           </p>
         </Card>
       </div>

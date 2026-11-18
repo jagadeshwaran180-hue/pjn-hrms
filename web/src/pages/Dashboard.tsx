@@ -18,7 +18,7 @@ import {
   FileCheck2,
   User
 } from 'lucide-react';
-import { mockKpis, mockAttendanceTrend, mockLeaveRequests, mockEmployees } from '../data/mockData';
+import { mockKpis, mockLeaveRequests, mockEmployees } from '../data/mockData';
 import { Card, Badge, Button, Modal } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { useRefresh } from '../context/RefreshContext';
@@ -183,7 +183,7 @@ export const Dashboard: React.FC = () => {
         {
           id: 'my_regularization',
           title: 'My Regularizations',
-          value: dashboardStats?.pendingLeaves !== undefined ? `${dashboardStats.pendingLeaves} Pending` : '1 Pending',
+          value: dashboardStats?.pendingRegularizations !== undefined ? `${dashboardStats.pendingRegularizations} Pending` : '1 Pending',
           subtitle: 'Missed check-out punch',
           icon: FileCheck2,
           accentColor: '#F59E0B',
@@ -498,7 +498,7 @@ export const Dashboard: React.FC = () => {
             icon={<ClipboardCheck size={16} />}
             onClick={() => navigate('/attendance')}
           >
-            Mark GPS Check-In
+            {dashboardStats?.isCheckedIn ? 'Punch Check-Out' : 'Mark GPS Check-In'}
           </Button>
         )}
       </div>
@@ -573,13 +573,15 @@ export const Dashboard: React.FC = () => {
                 onClick={() => handleOpenKpiModal('present')}
                 className="text-xs font-semibold text-[#6534E8] hover:underline flex items-center gap-1 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100"
               >
-                <span>Avg. {((mockAttendanceTrend.reduce((s, d) => s + (d.presentCount / d.totalCount), 0) / mockAttendanceTrend.length) * 100).toFixed(1)}% Present</span>
+                <span>
+                  {isManager ? 'Avg. 100% Present' : 'Avg. 92.2% Present'}
+                </span>
                 <ArrowUpRight size={13} />
               </button>
             )}
           </div>
 
-          {/* SVG Line Chart */}
+          {/* SVG Line Chart - Tuesday 17-Nov is today, only Mon & Tue show past/current data */}
           <div className="h-56 sm:h-64 w-full relative pt-4 pb-2">
             <svg className="w-full h-full overflow-visible" viewBox="0 0 500 200" preserveAspectRatio="none">
               <defs>
@@ -596,7 +598,7 @@ export const Dashboard: React.FC = () => {
 
               <polygon
                 fill="url(#purpleGrad)"
-                points="30,120 130,50 250,90 370,40 470,70 470,190 30,190"
+                points="30,120 130,50 130,190 30,190"
               />
 
               <polyline
@@ -605,15 +607,12 @@ export const Dashboard: React.FC = () => {
                 strokeWidth="3.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                points="30,120 130,50 250,90 370,40 470,70"
+                points="30,120 130,50"
               />
 
               {[
-                { x: 30, y: 120, label: isEmployee ? '9h 00m' : '138' },
-                { x: 130, y: 50, label: isEmployee ? '8h 30m' : '144' },
-                { x: 250, y: 90, label: isEmployee ? '9h 10m' : '140' },
-                { x: 370, y: 40, label: isEmployee ? '8h 47m' : '146' },
-                { x: 470, y: 70, label: isEmployee ? '9h 09m' : '142' }
+                { x: 30, y: 120, label: isEmployee ? '9h 00m' : isManager ? '4' : '138' },
+                { x: 130, y: 50, label: isEmployee ? 'In Progress' : isManager ? '4' : '142' }
               ].map((pt, idx) => (
                 <g key={idx}>
                   <circle cx={pt.x} cy={pt.y} r="6" fill="#FFFFFF" stroke="#6534E8" strokeWidth="3" />
@@ -630,8 +629,8 @@ export const Dashboard: React.FC = () => {
             </svg>
 
             <div className="flex justify-between px-4 sm:px-6 mt-2 text-xs font-semibold text-gray-500">
-              {mockAttendanceTrend.map((d) => (
-                <span key={d.day}>{d.day}</span>
+              {['Mon (16 Nov)', 'Tue (Today)', 'Wed', 'Thu', 'Fri'].map((day) => (
+                <span key={day}>{day}</span>
               ))}
             </div>
           </div>
@@ -951,7 +950,7 @@ export const Dashboard: React.FC = () => {
           isOpen={activeKpi === 'late'}
           onClose={handleCloseModal}
           title={isManager ? 'Team Late Arrivals' : 'Late Check-In Exceptions'}
-          subtitle="Punches registered after 09:30 AM cutoff"
+          subtitle="Punches registered after 09:15 AM cutoff"
           badge={`${filteredLateArrivals.length} Exceptions`}
           maxWidth="2xl"
           footer={

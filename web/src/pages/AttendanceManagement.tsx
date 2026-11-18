@@ -293,9 +293,12 @@ export const AttendanceManagement: React.FC = () => {
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase">Geofence Compliance</p>
               <h3 className="text-2xl font-extrabold text-[#151936] mt-1">
-                {logs.length > 0
-                  ? `${Math.round(((logs.length - logs.filter((l) => l.locationStatus === 'Geofence Breach').length) / logs.length) * 100)}%`
-                  : '100%'}
+                {(() => {
+                  const checkedInLogs = logs.filter((l) => l.checkIn !== '--:--');
+                  if (checkedInLogs.length === 0) return '100%';
+                  const breaches = checkedInLogs.filter((l) => l.locationStatus === 'Geofence Breach').length;
+                  return `${Math.round(((checkedInLogs.length - breaches) / checkedInLogs.length) * 100)}%`;
+                })()}
               </h3>
               <p className="text-xs text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
                 <CheckCircle2 size={13} /> Verified coordinates
@@ -344,6 +347,7 @@ export const AttendanceManagement: React.FC = () => {
             <option value="All">All Statuses</option>
             <option value="Present">Present</option>
             <option value="Late">Late</option>
+            <option value="Absent">Absent</option>
             <option value="On Leave">On Leave</option>
           </select>
         </div>
@@ -431,26 +435,32 @@ export const AttendanceManagement: React.FC = () => {
                       </td>
 
                       <td className="py-3.5 px-4 sm:px-6">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          log.locationStatus === 'Inside Geofence'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : log.locationStatus === 'Hybrid Approved'
-                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                            : log.locationStatus === 'Approved Leave'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-red-50 text-red-700 border border-red-200'
-                        }`}>
-                          {log.locationStatus === 'Inside Geofence' ? (
-                            <CheckCircle2 size={12} />
-                          ) : log.locationStatus === 'Hybrid Approved' ? (
-                            <Laptop size={12} />
-                          ) : log.locationStatus === 'Approved Leave' ? (
-                            <CalendarCheck size={12} />
-                          ) : (
-                            <XCircle size={12} />
-                          )}
-                          {log.locationStatus}{log.locationStatus === 'Inside Geofence' || log.locationStatus === 'Geofence Breach' ? ` (${log.distanceMeters}m)` : ''}
-                        </span>
+                        {log.status === 'Absent' || (log.locationStatus as string) === 'N/A' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-50 text-gray-500 border border-gray-200">
+                            N/A
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                            log.locationStatus === 'Inside Geofence'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : log.locationStatus === 'Hybrid Approved'
+                              ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                              : log.locationStatus === 'Approved Leave'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : 'bg-red-50 text-red-700 border border-red-200'
+                          }`}>
+                            {log.locationStatus === 'Inside Geofence' ? (
+                              <CheckCircle2 size={12} />
+                            ) : log.locationStatus === 'Hybrid Approved' ? (
+                              <Laptop size={12} />
+                            ) : log.locationStatus === 'Approved Leave' ? (
+                              <CalendarCheck size={12} />
+                            ) : (
+                              <XCircle size={12} />
+                            )}
+                            {log.locationStatus}{log.locationStatus === 'Inside Geofence' || log.locationStatus === 'Geofence Breach' ? ` (${log.distanceMeters}m)` : ''}
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-3.5 px-4 sm:px-6">

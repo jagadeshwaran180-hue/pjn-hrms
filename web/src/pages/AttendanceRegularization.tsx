@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   FileCheck2,
   Plus,
@@ -33,6 +33,14 @@ interface RegularizationRequest {
   version: number;
 }
 
+const formatTimestamp = (ts?: string) => {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return ts;
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' +
+         d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+};
+
 export const AttendanceRegularization: React.FC = () => {
   const { user, canApprove } = useAuth();
   const { registerRefreshHandler } = useRefresh();
@@ -54,10 +62,29 @@ export const AttendanceRegularization: React.FC = () => {
   const [form, setForm] = useState({
     date: '16 Nov 2026',
     originalPunch: 'Check-In: 09:15 AM | Check-Out: --:--',
-    requestedPunch: 'Check-Out: 06:15 PM',
+    requestedPunch: '',
     type: 'Missed Check-Out' as RegularizationRequest['type'],
     reason: ''
   });
+
+  const handleOpenModal = async () => {
+    setFormError(null);
+    let original = 'Check-In: 09:15 AM | Check-Out: --:--';
+    try {
+      const logs = await api.getAttendanceLogs();
+      const myLog = logs.find((l: any) => l.empId === user?.id && (l.date === form.date || l.date === '16 Nov 2026'));
+      if (myLog) {
+        original = `Check-In: ${myLog.checkIn || '--:--'} | Check-Out: ${myLog.checkOut || '--:--'}`;
+      }
+    } catch {}
+    setForm((prev) => ({
+      ...prev,
+      originalPunch: original,
+      requestedPunch: '',
+      reason: ''
+    }));
+    setIsModalOpen(true);
+  };
 
   // Fetch from backend
   const loadRequests = useCallback(async () => {
@@ -218,7 +245,7 @@ export const AttendanceRegularization: React.FC = () => {
           </p>
         </div>
 
-        <Button onClick={() => { setFormError(null); setIsModalOpen(true); }} icon={<Plus size={16} />}>
+        <Button onClick={handleOpenModal} icon={<Plus size={16} />}>
           Request Regularization
         </Button>
       </div>
@@ -369,11 +396,18 @@ export const AttendanceRegularization: React.FC = () => {
                         <p className="text-gray-400">
                           {(() => {
                             const parts = r.originalPunch.split(' | ');
-                            const strikeIn  = r.type === 'Missed Check-In'  || r.type === 'GPS Timeout / Device Glitch' || r.type === 'On-Duty Client Visit';
-                            const strikeOut = r.type === 'Missed Check-Out' || r.type === 'GPS Timeout / Device Glitch' || r.type === 'On-Duty Client Visit';
+                            const req = r.requestedPunch.toLowerCase();
+                            const correctsIn = req.includes('in:') || req.includes('check-in') || r.type === 'Missed Check-In';
+                            const correctsOut = req.includes('out:') || req.includes('check-out') || r.type === 'Missed Check-Out';
+                            let strikeIn = correctsIn;
+                            let strikeOut = correctsOut;
+                            if (!correctsIn && !correctsOut) {
+                              strikeIn = true;
+                              strikeOut = true;
+                            }
                             return (
                               <>
-                                <span className={strikeIn  ? 'line-through' : ''}>{parts[0]}</span>
+                                <span className={strikeIn ? 'line-through' : ''}>{parts[0]}</span>
                                 {parts[1] !== undefined && (
                                   <> | <span className={strikeOut ? 'line-through' : ''}>{parts[1]}</span></>
                                 )}
@@ -404,7 +438,7 @@ export const AttendanceRegularization: React.FC = () => {
                         {r.processedBy && (
                           <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">
                             {r.status} by {r.processedBy}
-                            {r.processedAt ? <><br />{r.processedAt}</> : null}
+                            {r.processedAt ? <><br />{formatTimestamp(r.processedAt)}</> : null}
                           </p>
                         )}
                       </td>
@@ -530,11 +564,11 @@ export const AttendanceRegularization: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label="Original Punch Record"
+              label="Original Punch Record (Read-Only)"
               value={form.originalPunch}
-              onChange={(e) => setForm({ ...form, originalPunch: e.target.value })}
+              readOnly
               disabled={formSubmitting}
-              required
+              className="bg-gray-100 cursor-not-allowed text-gray-500"
             />
             <Input
               label="Requested Correction Time *"

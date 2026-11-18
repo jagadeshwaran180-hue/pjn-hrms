@@ -232,6 +232,17 @@ export async function createBranch(payload: any) {
   return res.branch;
 }
 
+export async function updateBranch(id: string, payload: any) {
+  const res = await apiFetch<{ success: boolean; branch: any }>(
+    `/api/branches/${encodeURIComponent(id)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }
+  );
+  return res.branch;
+}
+
 // --- SHIFTS API ---
 export async function getShifts() {
   const res = await apiFetch<{ shifts: any[] }>('/api/shifts');

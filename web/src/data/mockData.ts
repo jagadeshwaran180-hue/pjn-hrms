@@ -32,7 +32,7 @@ export const mockKpis = [
     id: 'late',
     title: 'Late Arrivals',
     value: 4,
-    subtitle: 'After 09:30 AM',
+    subtitle: 'After 09:15 AM',
     iconName: 'Clock',
     accentColor: '#EF4444',
     bgColor: '#FEF2F2'

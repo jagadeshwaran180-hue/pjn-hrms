@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard,
+  Home,
   Building2,
   Users,
   MapPin,
@@ -27,14 +27,14 @@ export const navigationConfig: NavItemConfig[] = [
   {
     name: 'Dashboard',
     to: '/dashboard',
-    icon: LayoutDashboard,
+    icon: Home,
     roles: ['ADMIN', 'HR', 'MANAGER', 'EMPLOYEE'],
   },
   {
     name: 'Company & Branches',
     to: '/company',
     icon: Building2,
-    roles: ['ADMIN', 'HR'],
+    roles: ['ADMIN'],
   },
   {
     name: 'Employees',
@@ -52,7 +52,7 @@ export const navigationConfig: NavItemConfig[] = [
     name: 'Hybrid Approvals',
     to: '/hybrid-approvals',
     icon: Laptop,
-    roles: ['ADMIN', 'HR', 'MANAGER'],
+    roles: ['ADMIN', 'HR'],
   },
   {
     name: 'Leave Management',
@@ -64,7 +64,7 @@ export const navigationConfig: NavItemConfig[] = [
     name: 'Shift Rostering',
     to: '/shifts',
     icon: CalendarDays,
-    roles: ['ADMIN', 'HR'],
+    roles: ['ADMIN', 'HR', 'MANAGER'],
   },
   {
     name: 'Holiday Calendar',
@@ -82,7 +82,7 @@ export const navigationConfig: NavItemConfig[] = [
     name: 'Reports & Analytics',
     to: '/reports',
     icon: BarChart3,
-    roles: ['ADMIN', 'HR'],
+    roles: ['ADMIN', 'HR', 'MANAGER'],
   },
   {
     name: 'Settings & Roles',
@@ -94,6 +94,6 @@ export const navigationConfig: NavItemConfig[] = [
     name: 'Audit Logs',
     to: '/audit-logs',
     icon: ShieldAlert,
-    roles: ['ADMIN', 'HR'],
+    roles: ['ADMIN'],
   },
 ];
