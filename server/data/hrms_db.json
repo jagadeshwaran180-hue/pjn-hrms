@@ -1,6 +1,20 @@
 {
   "leaves": [
     {
+      "id": "LR-969",
+      "empId": "EMP-001",
+      "name": "Jagadeesh K",
+      "department": "Engineering",
+      "leaveType": "Casual Leave",
+      "startDate": "19/11/2026",
+      "endDate": "24/11/2026",
+      "days": 1,
+      "reason": "cdycgygceydge",
+      "status": "Pending",
+      "appliedOn": "17 Nov 2026",
+      "version": 1
+    },
+    {
       "id": "LR-838",
       "empId": "EMP-001",
       "name": "Jagadeesh K",
@@ -359,8 +373,8 @@
       "branch": "BLR-HQ",
       "date": "17 Nov 2026",
       "checkIn": "09:08 AM",
-      "checkOut": "--:--",
-      "workHours": "In Progress",
+      "checkOut": "11:21 pm",
+      "workHours": "14h 13m",
       "locationStatus": "Inside Geofence",
       "status": "Present",
       "distanceMeters": 28
@@ -535,6 +549,26 @@
     }
   ],
   "employees": [
+    {
+      "id": "EMP-0156",
+      "name": "bbvvt",
+      "department": "Engineering",
+      "designation": "vtvc",
+      "email": "bygtft@gmail.com",
+      "status": "Active",
+      "joinDate": "16 Nov 2026",
+      "role": "EMPLOYEE"
+    },
+    {
+      "id": "EMP-0155",
+      "name": "bgvgvf",
+      "department": "Engineering",
+      "designation": "bhvvfc",
+      "email": "vvfrd@gmail.com",
+      "status": "Active",
+      "joinDate": "16 Nov 2026",
+      "role": "EMPLOYEE"
+    },
     {
       "id": "EMP-001",
       "name": "Jagadeesh K",
@@ -4576,6 +4610,36 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "AUD-690",
+      "timestamp": "19 Nov 2026, 12:31 AM",
+      "actor": "hr@pjntech.com",
+      "role": "HR",
+      "action": "Added New Employee Profile",
+      "target": "bbvvt (EMP-0156)",
+      "ipAddress": "::1",
+      "status": "SUCCESS"
+    },
+    {
+      "id": "AUD-793",
+      "timestamp": "19 Nov 2026, 12:21 AM",
+      "actor": "hr@pjntech.com",
+      "role": "HR",
+      "action": "Added New Employee Profile",
+      "target": "bgvgvf (EMP-0155)",
+      "ipAddress": "::1",
+      "status": "SUCCESS"
+    },
+    {
+      "id": "AUD-617",
+      "timestamp": "18 Nov 2026, 11:21 PM",
+      "actor": "hr@pjntech.com",
+      "role": "HR",
+      "action": "GPS Check-Out Punch",
+      "target": "Office BLR-HQ (14m inside geofence)",
+      "ipAddress": "::1",
+      "status": "SUCCESS"
+    },
     {
       "id": "AUD-950",
       "timestamp": "18 Nov 2026, 12:56 PM",

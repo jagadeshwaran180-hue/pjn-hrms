@@ -20,8 +20,8 @@ async function parseBody(req: IncomingMessage): Promise<any> {
     let data = '';
     req.on('data', (chunk) => {
       data += chunk;
-      // Protect against body overflow
-      if (data.length > 1e6) {
+      // Protect against body overflow (allow up to 10MB for base64 images/profile photos)
+      if (data.length > 10 * 1024 * 1024) {
         req.destroy();
         reject(new Error('Request entity too large'));
       }
