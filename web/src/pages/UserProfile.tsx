@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Mail,
   Calendar,
@@ -16,10 +16,12 @@ import {
   Phone,
   Save,
   Download,
-  ClipboardList
+  ClipboardList,
+  Loader2
 } from 'lucide-react';
 import { Card, Badge, Button, Modal } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
+import { useRefresh } from '../context/RefreshContext';
 import * as api from '../services/api';
 
 type ModalKey =
@@ -49,10 +51,11 @@ const mockLeaveBalance = [
 
 export const UserProfile: React.FC = () => {
   const { user } = useAuth();
+  const { registerRefreshHandler } = useRefresh();
   const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /* User profile state derived from authenticated session */
+  /* User profile state derived from authenticated session and persisted employee data */
   const [profile, setProfile] = useState({
     name: user?.name || 'Authorized User',
     email: user?.email || 'user@pjntech.com',
@@ -62,19 +65,47 @@ export const UserProfile: React.FC = () => {
     location: 'Bangalore Headquarters (EcoWorld, BLR-HQ)',
   });
 
-  useEffect(() => {
-    if (user) {
-      setProfile((prev) => ({
-        ...prev,
-        name: user.name,
-        email: user.email,
-        designation: user.designation,
-        department: user.department,
-      }));
+  const [editForm, setEditForm] = useState({ ...profile });
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const loadProfile = useCallback(async () => {
+    if (!user?.id && !user?.email) return;
+    try {
+      const employees = await api.getEmployees();
+      const myEmp = employees.find(
+        (e: any) =>
+          (user.id && e.id === user.id) ||
+          (user.email && e.email && e.email.toLowerCase() === user.email.toLowerCase())
+      );
+      if (myEmp) {
+        setProfile((prev) => ({
+          ...prev,
+          name: myEmp.name || user.name || prev.name,
+          email: myEmp.email || user.email || prev.email,
+          designation: myEmp.designation || user.designation || prev.designation,
+          department: myEmp.department || user.department || prev.department,
+          phone: myEmp.phone || prev.phone,
+          location: myEmp.location || (myEmp.branch ? `PJN Tech Headquarters (${myEmp.branch})` : prev.location),
+        }));
+        if (myEmp.avatar) {
+          setAvatarSrc(myEmp.avatar);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load employee profile:', err);
     }
   }, [user]);
 
-  const [editForm, setEditForm] = useState({ ...profile });
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
+
+  useEffect(() => {
+    return registerRefreshHandler(async () => {
+      await loadProfile();
+    });
+  }, [registerRefreshHandler, loadProfile]);
 
   /* password form */
   const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
@@ -135,14 +166,44 @@ export const UserProfile: React.FC = () => {
 
   const strengthLabel = ['', 'Weak', 'Fair', 'Good', 'Strong'];
 
-  /* Save profile: Enforces that role, id, and permissions cannot be changed! */
-  const saveProfile = () => {
-    setProfile({
-      ...profile,
-      phone: editForm.phone,
-      location: editForm.location,
-    });
-    closeModal();
+  /* Save profile: Updates contact details (phone, location) and persists to backend */
+  const saveProfile = async () => {
+    if (!user?.id) return;
+    setSaveError(null);
+
+    const phoneTrimmed = editForm.phone.trim();
+    const locationTrimmed = editForm.location.trim();
+
+    if (!phoneTrimmed) {
+      setSaveError('Phone number is required.');
+      return;
+    }
+    if (!locationTrimmed) {
+      setSaveError('Location / Work office is required.');
+      return;
+    }
+
+    setSaveLoading(true);
+    try {
+      await api.updateEmployee(user.id, {
+        phone: phoneTrimmed,
+        location: locationTrimmed,
+      });
+
+      // Update immediate local profile card
+      setProfile((prev) => ({
+        ...prev,
+        phone: phoneTrimmed,
+        location: locationTrimmed,
+      }));
+
+      closeModal();
+    } catch (err: any) {
+      console.error('Failed to update contact profile:', err);
+      setSaveError(err.message || 'Failed to update contact details. Please retry.');
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
   /* save password */
@@ -300,6 +361,7 @@ export const UserProfile: React.FC = () => {
               variant="outline"
               icon={<Edit3 size={14} />}
               onClick={() => {
+                setSaveError(null);
                 setEditForm({ ...profile });
                 openModal('editProfile');
               }}
@@ -457,19 +519,48 @@ export const UserProfile: React.FC = () => {
       {/* 1. Edit Profile Modal - Strict RBAC Enforcement (No role change permitted) */}
       <Modal
         isOpen={activeModal === 'editProfile'}
-        onClose={closeModal}
+        onClose={() => {
+          if (!saveLoading) {
+            setSaveError(null);
+            closeModal();
+          }
+        }}
         title="Edit Contact Profile"
         subtitle="Update your personal contact phone and location"
         badge={user?.id || 'EMP-001'}
         maxWidth="md"
         footer={
           <>
-            <Button variant="outline" size="sm" onClick={closeModal}>Cancel</Button>
-            <Button size="sm" icon={<Save size={14} />} onClick={saveProfile}>Save Changes</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={saveLoading}
+              onClick={() => {
+                setSaveError(null);
+                closeModal();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              icon={saveLoading ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              disabled={saveLoading}
+              onClick={saveProfile}
+            >
+              {saveLoading ? 'Saving...' : 'Save Changes'}
+            </Button>
           </>
         }
       >
         <div className="space-y-4">
+          {saveError && (
+            <div className="p-3 bg-red-50 rounded-xl border border-red-200 text-xs text-red-700 font-semibold flex items-center gap-2">
+              <XCircle size={15} className="shrink-0 text-red-600" />
+              <span>{saveError}</span>
+            </div>
+          )}
+
           <div className="p-3 bg-purple-50/50 rounded-xl border border-purple-100 flex items-center justify-between text-xs">
             <div>
               <span className="text-gray-500 block">System Role (Immutable):</span>
@@ -511,9 +602,10 @@ export const UserProfile: React.FC = () => {
               </label>
               <input
                 type="text"
+                disabled={saveLoading}
                 value={editForm.phone}
                 onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#6534E8]/30 focus:border-[#6534E8]"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#6534E8]/30 focus:border-[#6534E8] disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -535,9 +627,10 @@ export const UserProfile: React.FC = () => {
               </label>
               <input
                 type="text"
+                disabled={saveLoading}
                 value={editForm.location}
                 onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#6534E8]/30 focus:border-[#6534E8]"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#6534E8]/30 focus:border-[#6534E8] disabled:bg-gray-100 disabled:cursor-not-allowed"
               />
             </div>
           </div>

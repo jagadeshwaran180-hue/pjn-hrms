@@ -947,7 +947,7 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
     const employeeIdMatch = pathname.match(/^\/api\/employees\/([^/]+)$/);
     if (employeeIdMatch && (method === 'PUT' || method === 'PATCH')) {
       const empId = employeeIdMatch[1];
-      if (session.role !== 'ADMIN' && session.role !== 'HR') {
+      if (session.role !== 'ADMIN' && session.role !== 'HR' && session.id !== empId) {
         sendJSON(res, 403, { error: 'Forbidden: Insufficient privileges to update employee.' });
         return true;
       }
@@ -956,6 +956,11 @@ export async function handleApiRequest(req: IncomingMessage, res: ServerResponse
       const updated = await updateDB((db) => {
         const emp = db.employees.find((e) => e.id === empId);
         if (!emp) return null;
+        if (session.role !== 'ADMIN' && session.role !== 'HR') {
+          delete body.role;
+          delete body.id;
+          delete body.email;
+        }
         Object.assign(emp, body);
         return emp;
       });

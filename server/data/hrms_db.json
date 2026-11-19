@@ -714,7 +714,9 @@
       "status": "Active",
       "joinDate": "01 Jan 2021",
       "role": "ADMIN",
-      "branch": "BLR-HQ"
+      "branch": "BLR-HQ",
+      "phone": "+91 98765 43210",
+      "location": "Bangalore Headquarters (EcoWorld, BLR-HQ)"
     },
     {
       "id": "EMP-013",

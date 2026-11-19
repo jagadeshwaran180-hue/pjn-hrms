@@ -9,6 +9,9 @@ export interface Employee {
   joinDate?: string;
   role?: UserRole;
   managerId?: string;
+  phone?: string;
+  location?: string;
+  branch?: string;
 }
 
 export interface LeaveRequest {
